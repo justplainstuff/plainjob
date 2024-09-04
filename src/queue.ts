@@ -27,6 +27,8 @@ type QueueOptions = {
   onFailedJobsRemoved?: (n: number) => void;
   /** Gets called when timed out jobs are requeued by the maintenance task. */
   onProcessingJobsRequeued?: (n: number) => void;
+  /** A function that serializes job data before storing it in the database. */
+  serializer?: (data: unknown) => string;
 };
 
 /** A queue of jobs. */
@@ -77,6 +79,7 @@ export function defineQueue(opts: QueueOptions): Queue {
   const removeFailedJobsOlderThan =
     opts.removeFailedJobsOlderThan || 30 * 24 * 60 * 60 * 1000; // 30 days
   let maintenanceTimeout: NodeJS.Timeout;
+  const serializer = opts.serializer || ((data) => JSON.stringify(data));
 
   db.pragma("journal_mode = WAL");
   db.pragma("synchronous = 1");
@@ -241,7 +244,7 @@ export function defineQueue(opts: QueueOptions): Queue {
 
   const queue: Queue = {
     add(type: string, data: unknown): { id: number } {
-      const serializedData = JSON.stringify(data);
+      const serializedData = serializer(data);
       const result = insertJobStmt.run({
         type,
         data: serializedData,
@@ -262,7 +265,7 @@ export function defineQueue(opts: QueueOptions): Queue {
       );
       const jobs = dataList.map((data) => ({
         type,
-        data: JSON.stringify(data),
+        data: serializer(data),
         createdAt: now,
       }));
 

@@ -8,7 +8,6 @@ import {
 } from "../src/plainjobs";
 import type { Job } from "../src/plainjobs";
 import { processAll } from "../src/worker";
-import { W } from "vitest/dist/chunks/reporters.C_zwCd4j.js";
 
 describe("queue", async () => {
   it("should add a job to the queue", async () => {
@@ -40,6 +39,34 @@ describe("queue", async () => {
     }
 
     expect(queue.countJobs({ type: "paint" })).toBe(3);
+
+    queue.close();
+  });
+
+  it("should add a job to the queue with a custom serializer", async () => {
+    const connection = new BetterSqlite3Database(":memory:");
+
+    const customSerializer = (data: unknown) => {
+      if (typeof data === "object" && data !== null) {
+        return JSON.stringify(Object.entries(data).sort());
+      }
+      return JSON.stringify(data);
+    };
+
+    const queue = defineQueue({
+      connection,
+      serializer: customSerializer,
+    });
+
+    queue.add("customSerialize", { b: 2, a: 1, c: 3 });
+
+    const job = queue.getAndMarkJobAsProcessing("customSerialize");
+    if (!job) throw new Error("Job not found");
+
+    expect(job.data).toBe('[["a",1],["b",2],["c",3]]');
+
+    const parsedData = JSON.parse(job.data);
+    expect(Object.fromEntries(parsedData)).toEqual({ a: 1, b: 2, c: 3 });
 
     queue.close();
   });
