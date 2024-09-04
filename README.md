@@ -1,6 +1,6 @@
 # plainjobs
 
-A SQLite-backed job queue for Node.js.
+A SQLite-backed job queue processing 40k jobs/s.
 
 ## Getting Started
 
