@@ -209,7 +209,7 @@ export function defineQueue(opts: QueueOptions): Queue {
   `);
 
   const getAndMarkJobAsProcessingStmt = db.prepare(`
-    UPDATE plainjobs_jobs SET status = 'processing'
+    UPDATE plainjobs_jobs SET status = ${JobStatus.Processing}
     WHERE status = ${JobStatus.Pending} AND type = @type
     RETURNING *
     ORDER BY created_at LIMIT 1`);
