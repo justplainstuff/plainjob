@@ -207,10 +207,17 @@ export function defineQueue(opts: QueueOptions): Queue {
     UPDATE plainjobs_jobs SET status = 'pending' WHERE status = 'processing' AND created_at < @threshold
   `);
 
-  const getAndMarkJobAsProcessingStmt = db.prepare(`
-    UPDATE plainjobs_jobs SET status = 'processing'
+  const getNextPendingJobStmt = db.prepare(`
+    SELECT 
+      id,
+      type,
+      data,
+      created_at as createdAt,
+      status,
+      failed_at as failedAt,
+      error
+    FROM plainjobs_jobs 
     WHERE status = 'pending' AND type = @type
-    RETURNING *
     ORDER BY created_at LIMIT 1
   `);
 
@@ -364,9 +371,19 @@ export function defineQueue(opts: QueueOptions): Queue {
       }
     },
     getAndMarkJobAsProcessing(type: string): PersistedJob | undefined {
-      return getAndMarkJobAsProcessingStmt.get({
-        type,
-      }) as PersistedJob | undefined;
+      return db
+        .transaction((type: string): PersistedJob | undefined => {
+          const job = getNextPendingJobStmt.get({
+            type,
+          }) as PersistedJob | undefined;
+
+          if (job) {
+            updateJobStatusStmt.run({ status: "processing", id: job.id });
+            return { ...job, status: "processing" };
+          }
+          return undefined;
+        })
+        .immediate(type);
     },
     getAndMarkScheduledJobAsProcessing(): PersistedScheduledJob | undefined {
       return db
