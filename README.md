@@ -135,14 +135,14 @@ const numCPUs = os.cpus().length;
 const dbUrl = "queue.db";
 
 for (let i = 0; i < numCPUs; i++) {
-  const worker = fork("./bench-worker.ts", [dbUrl]);
+  const worker = fork("./worker.ts", [dbUrl]);
   worker.on("exit", (code) => {
     console.log(`Worker ${i} exited with code ${code}`);
   });
 }
 ```
 
-In `bench-worker.ts`:
+In `worker.ts`:
 
 ```typescript
 import Database from "better-sqlite3";
