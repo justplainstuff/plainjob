@@ -102,7 +102,7 @@ function spawnWorkerProcess(dbUrl: string): Promise<void> {
 }
 
 async function runScenarios() {
-  await runScenario("bench.db", 100_000, 0, 2);
+  await runScenario("bench.db", 50000, 0, 2);
   await runScenario(":memory:", 1000, 1, 0);
   await runScenario(":memory:", 4000, 4, 0);
   await runScenario(":memory:", 8000, 8, 0);
