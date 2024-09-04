@@ -1,6 +1,6 @@
 # plainjobs
 
-A SQLite-backed job queue processing 40k jobs/s.
+A SQLite-backed job queue processing 15k jobs/s.
 
 ## Getting Started
 
@@ -38,7 +38,7 @@ worker.start();
 ## Features
 
 - **SQLite-backed**: Reliable persistence using better-sqlite3
-- **High performance**: Process up to 40,000 jobs per second
+- **High performance**: Process up to 15,000 jobs per second
 - **Cron-scheduled jobs**: Easily schedule recurring tasks
 - **Automatic job cleanup**: Remove old completed and failed jobs
 - **Job timeout handling**: Requeue jobs if a worker dies

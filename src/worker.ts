@@ -31,7 +31,7 @@ type WorkerOptions = {
 export function defineWorker(
   jobType: string,
   processor: JobProcessor,
-  options: WorkerOptions,
+  options: WorkerOptions
 ): Worker {
   const log = options.logger || console;
   const id = Math.random().toString(36).substring(2, 15);
@@ -47,7 +47,7 @@ export function defineWorker(
     const scheduledJob = queue.getAndMarkScheduledJobAsProcessing();
     if (scheduledJob) {
       log.debug(
-        `worker [${id}] processing scheduled job '${scheduledJob.id}' '${scheduledJob.type}'`,
+        `worker [${id}] processing scheduled job '${scheduledJob.id}' '${scheduledJob.type}'`
       );
       const nextRun = parseCron(scheduledJob.cronExpression)
         .next()
@@ -55,11 +55,11 @@ export function defineWorker(
         .getTime();
       queue.markScheduledJobAsIdle(scheduledJob.id, nextRun);
       log.debug(
-        `worker [${id}] marking scheduled job ${scheduledJob.id} as 'idle'`,
+        `worker [${id}] marking scheduled job ${scheduledJob.id} as 'idle'`
       );
       queue.add(scheduledJob.type, {});
       log.debug(
-        `worker [${id}] adding job '${scheduledJob.id}' '${scheduledJob.type}' from scheduled job`,
+        `worker [${id}] adding job '${scheduledJob.id}' '${scheduledJob.type}' from scheduled job`
       );
 
       return true;
@@ -75,7 +75,7 @@ export function defineWorker(
         options.onProcessing(job);
       }
       log.debug(
-        `worker [${id}] processing job ${job.id}, ${job.type}, ${job.data}`,
+        `worker [${id}] processing job ${job.id}, ${job.type}, ${job.data}`
       );
       try {
         await processor({ id: job.id, data: job.data, type: job.type });
@@ -85,7 +85,9 @@ export function defineWorker(
         }
         log.debug(`worker [${id}] marking job ${job.id} as 'done'`);
       } catch (error) {
-        const errorMessage = `${(error as Error).stack}\n${(error as Error).message}`;
+        const errorMessage = `${(error as Error).stack}\n${
+          (error as Error).message
+        }`;
         queue.markJobAsFailed(job.id, errorMessage);
         if (options.onFailed) {
           options.onFailed(job, errorMessage);
@@ -98,30 +100,35 @@ export function defineWorker(
   }
 
   async function start() {
-    shouldKeepRunning = true;
-    while (shouldKeepRunning) {
-      const processedScheduled = await processScheduledJobs();
-      const processedRegular = await processRegularJobs();
+    try {
+      shouldKeepRunning = true;
+      while (shouldKeepRunning) {
+        const processedScheduled = await processScheduledJobs();
+        const processedRegular = await processRegularJobs();
 
-      if (
-        !processedScheduled &&
-        !processedRegular &&
-        isRunning &&
-        shouldKeepRunning
-      ) {
-        // sleeping until next poll interval
-        sleeping = new Promise<void>((resolve) => {
-          const timeout = setTimeout(resolve, pollInterval);
-          cancelSleep = () => {
-            clearTimeout(timeout);
-            resolve();
-          };
-        });
-        await sleeping;
-        cancelSleep = undefined;
+        if (
+          !processedScheduled &&
+          !processedRegular &&
+          isRunning &&
+          shouldKeepRunning
+        ) {
+          // sleeping until next poll interval
+          sleeping = new Promise<void>((resolve) => {
+            const timeout = setTimeout(resolve, pollInterval);
+            cancelSleep = () => {
+              clearTimeout(timeout);
+              resolve();
+            };
+          });
+          await sleeping;
+          cancelSleep = undefined;
+        }
       }
+      isRunning = false;
+    } catch (error) {
+      log.error(`worker [${id}] encountered error: ${error}`);
+      throw error;
     }
-    isRunning = false;
   }
 
   async function stop() {
@@ -147,11 +154,11 @@ export function defineWorker(
 export async function processAll(
   queue: Queue,
   worker: Worker,
-  opts?: { logger?: Logger; timeout?: number },
+  opts?: { logger?: Logger; timeout?: number }
 ) {
   const log = opts?.logger || console;
   const timeout = opts?.timeout ?? 1000;
-  worker.start();
+  void worker.start();
   const start = Date.now();
   await new Promise((resolve) => setTimeout(resolve, 10));
   while (

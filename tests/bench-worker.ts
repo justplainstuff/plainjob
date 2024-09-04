@@ -20,14 +20,13 @@ if (!dbUrl) {
 const connection = new Database(dbUrl);
 
 const queue = defineQueue({ connection, logger });
-const worker = defineWorker(
-  "bench",
-  async (job: Job) => new Promise((resolve) => setTimeout(resolve, 0)),
-  { queue, logger },
-);
+const worker = defineWorker("bench", async (job: Job) => Promise.resolve(), {
+  queue,
+  logger,
+});
 
 async function run() {
-  processAll(queue, worker, { logger, timeout: 60 * 1000 });
+  await processAll(queue, worker, { logger, timeout: 60 * 1000 });
   queue.close();
   process.exit(0);
 }

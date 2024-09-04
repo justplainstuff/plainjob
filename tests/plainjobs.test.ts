@@ -15,6 +15,29 @@ describe("queue", async () => {
     queue.close();
   });
 
+  it("should add multiple jobs of the same type to the queue", async () => {
+    const connection = new BetterSqlite3Database(":memory:");
+    const queue = defineQueue({ connection });
+
+    const jobData = [{ color: "red" }, { color: "green" }, { color: "blue" }];
+
+    const { ids } = queue.addMany("paint", jobData);
+
+    expect(ids).toHaveLength(3);
+
+    for (let i = 0; i < ids.length; i++) {
+      const job = queue.getJobById(ids[i]!);
+      if (!job) throw new Error(`Job ${ids[i]} not found`);
+      expect(job.type).toBe("paint");
+      expect(JSON.parse(job.data)).toEqual(jobData[i]);
+      expect(job.status).toBe("pending");
+    }
+
+    expect(queue.countJobs({ type: "paint" })).toBe(3);
+
+    queue.close();
+  });
+
   it("should mark jobs as done or failed", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
@@ -355,7 +378,7 @@ describe("worker", async () => {
       async (job: Job) => {
         results.push(JSON.parse(job.data));
       },
-      { queue },
+      { queue }
     );
 
     queue.add("test", { value: 1 });
@@ -375,7 +398,7 @@ describe("worker", async () => {
       async (job: Job) => {
         results.push(JSON.parse(job.data));
       },
-      { queue },
+      { queue }
     );
 
     queue.schedule("scheduled", { cron: "* * * * *" });
@@ -431,7 +454,7 @@ describe("worker", async () => {
       async (job: Job) => {
         results.push(JSON.parse(job.data));
       },
-      { queue },
+      { queue }
     );
 
     await processAll(queue, worker);
@@ -450,7 +473,7 @@ describe("worker", async () => {
       async (job: Job) => {
         throw new Error("test error");
       },
-      { queue },
+      { queue }
     );
 
     await processAll(queue, worker);
@@ -474,7 +497,7 @@ describe("worker", async () => {
       async (job: Job) => {
         throw new Error("test error");
       },
-      { queue },
+      { queue }
     );
 
     worker.start();
@@ -541,7 +564,7 @@ describe("worker", async () => {
           failedJob = job;
           failedError = error;
         },
-      },
+      }
     );
 
     queue.add("test", { value: "failed test" });

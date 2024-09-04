@@ -32,6 +32,8 @@ type QueueOptions = {
 export type Queue = {
   /** Adds a new job to the queue. */
   add: (type: string, data: unknown) => { id: number };
+  /** Adds multiple new jobs of the same type to the queue. */
+  addMany: (type: string, data: unknown[]) => { ids: number[] };
   /** Schedules a recurring job using a cron expression. */
   schedule: (type: string, { cron }: { cron: string }) => { id: number };
   /** Counts jobs in the queue, optionally filtered by type and/or status. */
@@ -125,19 +127,19 @@ export function defineQueue(opts: QueueOptions): Queue {
   const countJobsStmt = db.prepare("SELECT COUNT(*) FROM plainjobs_jobs");
 
   const countJobsByTypeAndStatusStmt = db.prepare(
-    "SELECT COUNT(*) FROM plainjobs_jobs WHERE status = @status AND type = @type",
+    "SELECT COUNT(*) FROM plainjobs_jobs WHERE status = @status AND type = @type"
   );
 
   const countJobsByStatusStmt = db.prepare(
-    "SELECT COUNT(*) FROM plainjobs_jobs WHERE status = @status",
+    "SELECT COUNT(*) FROM plainjobs_jobs WHERE status = @status"
   );
 
   const countJobsByTypeStmt = db.prepare(
-    "SELECT COUNT(*) FROM plainjobs_jobs WHERE type = @type",
+    "SELECT COUNT(*) FROM plainjobs_jobs WHERE type = @type"
   );
 
   const getJobTypesStmt = db.prepare(
-    "SELECT DISTINCT type FROM plainjobs_jobs",
+    "SELECT DISTINCT type FROM plainjobs_jobs"
   );
 
   const getJobByIdStmt = db.prepare(`
@@ -190,11 +192,11 @@ export function defineQueue(opts: QueueOptions): Queue {
   `);
 
   const insertJobStmt = db.prepare(
-    "INSERT INTO plainjobs_jobs (type, data, created_at) VALUES (@type, @data, @createdAt)",
+    "INSERT INTO plainjobs_jobs (type, data, created_at) VALUES (@type, @data, @createdAt)"
   );
 
   const insertScheduledJobStmt = db.prepare(
-    "INSERT INTO plainjobs_scheduled_jobs (type, cron_expression, next_run, created_at) VALUES (@type, @cronExpression, @nextRun, @createdAt)",
+    "INSERT INTO plainjobs_scheduled_jobs (type, cron_expression, next_run, created_at) VALUES (@type, @cronExpression, @nextRun, @createdAt)"
   );
 
   const updateScheduledJobCronExpressionStmt = db.prepare(`
@@ -254,12 +256,34 @@ export function defineQueue(opts: QueueOptions): Queue {
       });
       return { id: result.lastInsertRowid as number };
     },
+    addMany(type: string, dataList: unknown[]): { ids: number[] } {
+      const now = Date.now();
+      const ids: number[] = [];
+      const insertManyJobs = db.transaction(
+        (jobs: { type: string; data: string; createdAt: number }[]) => {
+          for (const job of jobs) {
+            const result = insertJobStmt.run(job);
+            ids.push(result.lastInsertRowid as number);
+          }
+        }
+      );
+      const jobs = dataList.map((data) => ({
+        type,
+        data: JSON.stringify(data),
+        createdAt: now,
+      }));
+
+      insertManyJobs(jobs);
+      return { ids };
+    },
     schedule(type: string, { cron }: { cron: string }): { id: number } {
       try {
         parseCron(cron);
       } catch (error) {
         throw new Error(
-          `invalid cron expression provided: ${cron} ${(error as Error).message}`,
+          `invalid cron expression provided: ${cron} ${
+            (error as Error).message
+          }`
         );
       }
       const found = getScheduledJobByTypeStmt.get({
@@ -267,7 +291,7 @@ export function defineQueue(opts: QueueOptions): Queue {
       }) as PersistedScheduledJob | undefined;
       if (found) {
         log.debug(
-          `updating existing scheduled job ${found.id} with cron expression ${cron}`,
+          `updating existing scheduled job ${found.id} with cron expression ${cron}`
         );
         updateScheduledJobCronExpressionStmt.run({
           cronExpression: cron,
