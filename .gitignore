@@ -1,0 +1,5 @@
+node_modules
+dist
+bench.db*
+test.db*
+coverage
