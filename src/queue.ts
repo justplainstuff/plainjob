@@ -1,10 +1,11 @@
 import type { Database } from "better-sqlite3";
 import { parseExpression as parseCron } from "cron-parser";
-import type {
+import {
   JobStatus,
   Logger,
   PersistedJob,
   PersistedScheduledJob,
+  ScheduledJobStatus,
 } from "./jobs";
 
 type QueueOptions = {
@@ -86,7 +87,7 @@ export function defineQueue(opts: QueueOptions): Queue {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL,
       data TEXT NOT NULL,
-      status TEXT DEFAULT 'pending' NOT NULL,
+      status INTEGER DEFAULT 0 NOT NULL,
       failed_at INTEGER,
       error TEXT,
       created_at INTEGER NOT NULL
@@ -97,7 +98,7 @@ export function defineQueue(opts: QueueOptions): Queue {
     CREATE TABLE IF NOT EXISTS plainjobs_scheduled_jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL UNIQUE,
-      status TEXT DEFAULT 'idle' NOT NULL,
+      status INTEGER DEFAULT 0 NOT NULL,
       cron_expression TEXT,
       next_run INTEGER,
       created_at INTEGER NOT NULL
@@ -108,12 +109,12 @@ export function defineQueue(opts: QueueOptions): Queue {
 
   const removeDoneJobsStmt = db.prepare(`
     DELETE FROM plainjobs_jobs 
-    WHERE status = 'done' AND created_at < @threshold
+    WHERE status = ${JobStatus.Done} AND created_at < @threshold
   `);
 
   const removeFailedJobsStmt = db.prepare(`
     DELETE FROM plainjobs_jobs 
-    WHERE status = 'failed' AND failed_at < @threshold
+    WHERE status = ${JobStatus.Failed} AND failed_at < @threshold
   `);
 
   function initializeMaintenance() {
@@ -204,7 +205,7 @@ export function defineQueue(opts: QueueOptions): Queue {
   `);
 
   const requeueTimedOutJobsStmt = db.prepare(`
-    UPDATE plainjobs_jobs SET status = 'pending' WHERE status = 'processing' AND created_at < @threshold
+    UPDATE plainjobs_jobs SET status = ${JobStatus.Pending} WHERE status = ${JobStatus.Processing} AND created_at < @threshold
   `);
 
   const getNextPendingJobStmt = db.prepare(`
@@ -217,7 +218,7 @@ export function defineQueue(opts: QueueOptions): Queue {
       failed_at as failedAt,
       error
     FROM plainjobs_jobs 
-    WHERE status = 'pending' AND type = @type
+    WHERE status = ${JobStatus.Pending} AND type = @type
     ORDER BY created_at LIMIT 1
   `);
 
@@ -230,7 +231,7 @@ export function defineQueue(opts: QueueOptions): Queue {
       cron_expression as cronExpression,
       next_run as nextRun
     FROM plainjobs_scheduled_jobs 
-    WHERE status = 'idle' AND next_run <= @now
+    WHERE status = ${ScheduledJobStatus.Idle} AND next_run <= @now
     ORDER BY next_run LIMIT 1
   `);
 
@@ -243,7 +244,7 @@ export function defineQueue(opts: QueueOptions): Queue {
   `);
 
   const failJobStmt = db.prepare(`
-    UPDATE plainjobs_jobs SET status = 'failed', failed_at = @failedAt, error = @error WHERE id = @id
+    UPDATE plainjobs_jobs SET status = ${JobStatus.Failed}, failed_at = @failedAt, error = @error WHERE id = @id
   `);
 
   const queue: Queue = {
@@ -308,25 +309,26 @@ export function defineQueue(opts: QueueOptions): Queue {
       return { id: result.lastInsertRowid as number };
     },
     countJobs(opts?: { type?: string; status?: JobStatus }) {
-      if (opts?.status && !opts?.type) {
-        const result = countJobsByStatusStmt.get({ status: opts.status }) as {
-          "COUNT(*)": number;
-        };
-        return result["COUNT(*)"];
-      }
-      if (opts?.type && !opts?.status) {
-        const result = countJobsByTypeStmt.get({ type: opts.type }) as {
-          "COUNT(*)": number;
-        };
-        return result["COUNT(*)"];
-      }
-      if (opts?.type && opts?.status) {
+      if (opts?.type && opts?.status !== undefined) {
         const result = countJobsByTypeAndStatusStmt.get({
           type: opts.type,
           status: opts.status,
         }) as { "COUNT(*)": number };
         return result["COUNT(*)"];
       }
+      if (opts?.status !== undefined && !opts?.type) {
+        const result = countJobsByStatusStmt.get({ status: opts.status }) as {
+          "COUNT(*)": number;
+        };
+        return result["COUNT(*)"];
+      }
+      if (opts?.type && opts?.status === undefined) {
+        const result = countJobsByTypeStmt.get({ type: opts.type }) as {
+          "COUNT(*)": number;
+        };
+        return result["COUNT(*)"];
+      }
+
       const result = countJobsStmt.get() as { "COUNT(*)": number };
       return result["COUNT(*)"];
     },
@@ -378,8 +380,11 @@ export function defineQueue(opts: QueueOptions): Queue {
           }) as PersistedJob | undefined;
 
           if (job) {
-            updateJobStatusStmt.run({ status: "processing", id: job.id });
-            return { ...job, status: "processing" };
+            updateJobStatusStmt.run({
+              status: JobStatus.Processing,
+              id: job.id,
+            });
+            return { ...job, status: JobStatus.Processing };
           }
           return undefined;
         })
@@ -394,18 +399,18 @@ export function defineQueue(opts: QueueOptions): Queue {
 
           if (job) {
             updateScheduledJobStatusStmt.run({
-              status: "processing",
+              status: ScheduledJobStatus.Processing,
               id: job.id,
               nextRun: job.nextRun,
             });
-            return { ...job, status: "processing" };
+            return { ...job, status: ScheduledJobStatus.Processing };
           }
           return undefined;
         })
         .immediate();
     },
     markJobAsDone(id: number) {
-      return updateJobStatusStmt.run({ status: "done", id });
+      return updateJobStatusStmt.run({ status: JobStatus.Done, id });
     },
     markJobAsFailed(id: number, error: string) {
       return failJobStmt.run({
@@ -416,7 +421,7 @@ export function defineQueue(opts: QueueOptions): Queue {
     },
     markScheduledJobAsIdle(id: number, nextRun: number) {
       return updateScheduledJobStatusStmt.run({
-        status: "idle",
+        status: ScheduledJobStatus.Idle,
         id,
         nextRun,
       });

@@ -1,5 +1,5 @@
 import { parseExpression as parseCron } from "cron-parser";
-import type { Job, Logger } from "./jobs";
+import { JobStatus, type Job, type Logger } from "./jobs";
 import type { Queue } from "./queue";
 
 /** Function that processes a job and optionally returns a promise. */
@@ -162,8 +162,8 @@ export async function processAll(
   const start = Date.now();
   await new Promise((resolve) => setTimeout(resolve, 10));
   while (
-    queue.countJobs({ status: "pending" }) +
-      queue.countJobs({ status: "processing" }) >
+    queue.countJobs({ status: JobStatus.Pending }) +
+      queue.countJobs({ status: JobStatus.Processing }) >
     0
   ) {
     log.debug("waiting for jobs to be processed");

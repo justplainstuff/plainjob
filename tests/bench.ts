@@ -1,8 +1,7 @@
 import { type ChildProcess, fork } from "node:child_process";
-import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { defineQueue, defineWorker } from "../src/plainjobs";
+import { defineQueue, defineWorker, JobStatus } from "../src/plainjobs";
 import type { Job, Logger, Queue, Worker } from "../src/plainjobs";
 import { processAll } from "../src/worker";
 
@@ -59,14 +58,18 @@ async function runScenario(
 
   await Promise.all(workerPromises);
 
-  if (queue.countJobs({ status: "pending" }) > 0) {
+  if (queue.countJobs({ status: JobStatus.Pending }) > 0) {
     throw new Error(
-      `pending jobs remaining: ${queue.countJobs({ status: "pending" })}`
+      `pending jobs remaining: ${queue.countJobs({
+        status: JobStatus.Pending,
+      })}`
     );
   }
-  if (queue.countJobs({ status: "processing" }) > 0) {
+  if (queue.countJobs({ status: JobStatus.Processing }) > 0) {
     throw new Error(
-      `processing jobs remaining: ${queue.countJobs({ status: "processing" })}`
+      `processing jobs remaining: ${queue.countJobs({
+        status: JobStatus.Processing,
+      })}`
     );
   }
 
@@ -102,18 +105,18 @@ function spawnWorkerProcess(dbUrl: string): Promise<void> {
 }
 
 async function runScenarios() {
-  await runScenario("bench.db", 100_000, 0, 2);
-  await runScenario(":memory:", 1000, 1, 0);
-  await runScenario(":memory:", 4000, 4, 0);
-  await runScenario(":memory:", 8000, 8, 0);
-  await runScenario("bench.db", 100, 0, 1);
-  await runScenario("bench.db", 1000, 0, 1);
-  await runScenario("bench.db", 2000, 0, 2);
-  await runScenario("bench.db", 4000, 0, 4);
-  await runScenario("bench.db", 8000, 0, 8);
-  await runScenario("bench.db", 16000, 0, 16);
-  await runScenario("bench.db", 32000, 0, 32);
-  await runScenario("bench.db", 64000, 0, 64);
+  await runScenario("bench.db", 100_000, 0, 4);
+  // await runScenario(":memory:", 1000, 1, 0);
+  // await runScenario(":memory:", 4000, 4, 0);
+  // await runScenario(":memory:", 8000, 8, 0);
+  // await runScenario("bench.db", 100, 0, 1);
+  // await runScenario("bench.db", 1000, 0, 1);
+  // await runScenario("bench.db", 2000, 0, 2);
+  // await runScenario("bench.db", 4000, 0, 4);
+  // await runScenario("bench.db", 8000, 0, 8);
+  // await runScenario("bench.db", 16000, 0, 16);
+  // await runScenario("bench.db", 32000, 0, 32);
+  // await runScenario("bench.db", 64000, 0, 64);
 }
 
 runScenarios().catch(console.error);

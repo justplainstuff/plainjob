@@ -1,4 +1,9 @@
-export type JobStatus = "pending" | "processing" | "done" | "failed";
+export enum JobStatus {
+  Pending = 0,
+  Processing = 1,
+  Done = 2,
+  Failed = 3,
+}
 
 export type PersistedJob = {
   id: number;
@@ -11,7 +16,10 @@ export type PersistedJob = {
   error?: string;
 };
 
-export type ScheduledJobStatus = "idle" | "processing";
+export enum ScheduledJobStatus {
+  Idle = 0,
+  Processing = 1,
+}
 
 export type PersistedScheduledJob = {
   id: number;

@@ -1,8 +1,14 @@
 import BetterSqlite3Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
-import { defineQueue, defineWorker } from "../src/plainjobs";
+import {
+  defineQueue,
+  defineWorker,
+  JobStatus,
+  ScheduledJobStatus,
+} from "../src/plainjobs";
 import type { Job } from "../src/plainjobs";
 import { processAll } from "../src/worker";
+import { W } from "vitest/dist/chunks/reporters.C_zwCd4j.js";
 
 describe("queue", async () => {
   it("should add a job to the queue", async () => {
@@ -30,7 +36,7 @@ describe("queue", async () => {
       if (!job) throw new Error(`Job ${ids[i]} not found`);
       expect(job.type).toBe("paint");
       expect(JSON.parse(job.data)).toEqual(jobData[i]);
-      expect(job.status).toBe("pending");
+      expect(job.status).toBe(JobStatus.Pending);
     }
 
     expect(queue.countJobs({ type: "paint" })).toBe(3);
@@ -44,7 +50,7 @@ describe("queue", async () => {
     queue.add("test", { step: 1 });
     const job = queue.getAndMarkJobAsProcessing("test");
     if (!job) throw new Error("job not found");
-    expect(job.status).toBe("processing");
+    expect(job.status).toBe(JobStatus.Processing);
 
     queue.markJobAsDone(job.id);
 
@@ -53,7 +59,7 @@ describe("queue", async () => {
     if (!failedJob) throw new Error("job not found");
     queue.markJobAsFailed(failedJob.id, "test error");
     const found = queue.getJobById(failedJob.id);
-    expect(found?.status).toBe("failed");
+    expect(found?.status).toBe(JobStatus.Failed);
     expect(found?.error).toBe("test error");
   });
 
@@ -75,10 +81,10 @@ describe("queue", async () => {
     const job = queue.getAndMarkScheduledJobAsProcessing();
     if (!job) throw new Error("Job not found");
     expect(job).toBeDefined();
-    expect(job?.status).toBe("processing");
+    expect(job?.status).toBe(JobStatus.Processing);
 
     const updatedJob = queue.getScheduledJobById(job.id);
-    expect(updatedJob?.status).toBe("processing");
+    expect(updatedJob?.status).toBe(JobStatus.Processing);
 
     queue.close();
   });
@@ -96,7 +102,7 @@ describe("queue", async () => {
     queue.markScheduledJobAsIdle(id, nextRun);
 
     const updatedJob = queue.getScheduledJobById(id);
-    expect(updatedJob?.status).toBe("idle");
+    expect(updatedJob?.status).toBe(ScheduledJobStatus.Idle);
     expect(updatedJob?.nextRun).toBe(nextRun);
 
     queue.close();
@@ -115,12 +121,12 @@ describe("queue", async () => {
     const job = queue.getAndMarkJobAsProcessing("test");
     expect(job).toBeDefined();
     expect(job?.id).toBe(id);
-    expect(job?.status).toBe("processing");
+    expect(job?.status).toBe(JobStatus.Processing);
 
     await new Promise((resolve) => setTimeout(resolve, 80));
 
     const requeuedJob = queue.getJobById(id);
-    expect(requeuedJob?.status).toBe("pending");
+    expect(requeuedJob?.status).toBe(JobStatus.Pending);
 
     queue.close();
   });
@@ -184,20 +190,33 @@ describe("queue", async () => {
     queue.add("test2", { value: 3 });
     queue.add("test3", { value: 3 });
 
-    expect(queue.countJobs({ type: "test1", status: "pending" })).toBe(2);
-    expect(queue.countJobs({ type: "test2", status: "pending" })).toBe(1);
-    expect(queue.countJobs({ type: "test1", status: "processing" })).toBe(0);
+    expect(queue.countJobs({ type: "test1", status: JobStatus.Pending })).toBe(
+      2
+    );
+    expect(queue.countJobs({ type: "test2", status: JobStatus.Pending })).toBe(
+      1
+    );
+    expect(
+      queue.countJobs({ type: "test1", status: JobStatus.Processing })
+    ).toBe(0);
     expect(queue.countJobs({ type: "test3" })).toBe(1);
-    expect(queue.countJobs({ status: "pending" })).toBe(4);
+    expect(queue.countJobs({ status: JobStatus.Pending })).toBe(4);
     expect(queue.countJobs()).toBe(4);
 
     const job = queue.getAndMarkJobAsProcessing("test1");
-    expect(queue.countJobs({ type: "test1", status: "processing" })).toBe(1);
-    expect(queue.countJobs({ type: "test1", status: "pending" })).toBe(1);
-    expect(queue.countJobs({ status: "pending" })).toBe(3);
+
+    expect(
+      queue.countJobs({ type: "test1", status: JobStatus.Processing })
+    ).toBe(1);
+    expect(queue.countJobs({ type: "test1", status: JobStatus.Pending })).toBe(
+      1
+    );
+    expect(queue.countJobs({ status: JobStatus.Pending })).toBe(3);
 
     if (job) queue.markJobAsDone(job.id);
-    expect(queue.countJobs({ type: "test1", status: "done" })).toBe(1);
+    expect(queue.countJobs({ type: "test1", status: JobStatus.Done })).toBe(1);
+    expect(queue.countJobs({ status: JobStatus.Done })).toBe(1);
+    expect(queue.countJobs({ type: "test5" })).toBe(0);
     expect(queue.countJobs()).toBe(4);
 
     queue.close();
@@ -426,7 +445,7 @@ describe("worker", async () => {
     await processAll(queue, worker);
 
     const processedJob = queue.getJobById(id);
-    expect(processedJob?.status).toBe("done");
+    expect(processedJob?.status).toBe(JobStatus.Done);
     expect(processedJob?.type).toBe("paint");
   });
 
@@ -444,7 +463,7 @@ describe("worker", async () => {
     const job = queue.getAndMarkJobAsProcessing("test");
     expect(job).toBeDefined();
     expect(job?.id).toBe(id);
-    expect(job?.status).toBe("processing");
+    expect(job?.status).toBe(JobStatus.Processing);
 
     await new Promise((resolve) => setTimeout(resolve, 70));
 
@@ -480,7 +499,7 @@ describe("worker", async () => {
 
     const failedJob = queue.getJobById(id);
     expect(failedJob).toBeDefined();
-    expect(failedJob?.status).toBe("failed");
+    expect(failedJob?.status).toBe(JobStatus.Failed);
     expect(failedJob?.failedAt).toBeDefined();
     expect(failedJob?.failedAt).not.toBeNull();
     expect(failedJob?.error).toContain("test error");
@@ -505,7 +524,7 @@ describe("worker", async () => {
 
     const failedJob = queue.getJobById(id);
     expect(failedJob).toBeDefined();
-    expect(failedJob?.status).toBe("failed");
+    expect(failedJob?.status).toBe(JobStatus.Failed);
     expect(failedJob?.failedAt).toBeDefined();
     expect(failedJob?.error).toContain("test error");
     expect(failedJob?.failedAt).not.toBeNull();

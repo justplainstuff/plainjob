@@ -97,7 +97,7 @@ worker.start();
 
 ```typescript
 // Count pending jobs
-const pendingCount = queue.countJobs({ status: "pending" });
+const pendingCount = queue.countJobs({ status: JobStatus.Pending });
 
 // Get job types
 const types = queue.getJobTypes();
