@@ -1,5 +1,9 @@
 # plainjobs
 
+## v0.0.4
+
+[compare changes](https://github.com/justplainstuff/plainjobs/compare/v0.0.3...v0.0.4)
+
 ## v0.0.3
 
 
