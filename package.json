@@ -18,7 +18,7 @@
     "build": "tsc --noEmit src/plainjobs.ts && tsup",
     "bench": "tsx tests/bench.ts",
     "check": "pnpm build && pnpm test && pnpm bench",
-    "changelog": "changelogen --release --publish"
+    "publish": "changelogen --release --publish"
   },
   "keywords": [
     "plainjob",
