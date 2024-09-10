@@ -12,7 +12,7 @@ const logger: Logger = {
   debug: () => {},
 };
 
-function queueJobs(queue: Queue, count: number) {
+async function queueJobs(queue: Queue, count: number) {
   const jobs = [];
   for (let i = 0; i < count; i++) {
     jobs.push({ jobId: i });
@@ -58,14 +58,14 @@ async function runScenario(
 
   await Promise.all(workerPromises);
 
-  if (queue.countJobs({ status: JobStatus.Pending }) > 0) {
+  if ((await queue.countJobs({ status: JobStatus.Pending })) > 0) {
     throw new Error(
       `pending jobs remaining: ${queue.countJobs({
         status: JobStatus.Pending,
       })}`
     );
   }
-  if (queue.countJobs({ status: JobStatus.Processing }) > 0) {
+  if ((await queue.countJobs({ status: JobStatus.Processing })) > 0) {
     throw new Error(
       `processing jobs remaining: ${queue.countJobs({
         status: JobStatus.Processing,

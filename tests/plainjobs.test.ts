@@ -13,11 +13,11 @@ describe("queue", async () => {
   it("should add a job to the queue", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
-    queue.add("paint", { color: "red" });
-    const job = queue.getAndMarkJobAsProcessing("paint");
+    await queue.add("paint", { color: "red" });
+    const job = await queue.getAndMarkJobAsProcessing("paint");
     if (!job) throw new Error("Job not found");
     expect(JSON.parse(job.data)).toEqual({ color: "red" });
-    queue.close();
+    await queue.close();
   });
 
   it("should add multiple jobs of the same type to the queue", async () => {
@@ -26,21 +26,21 @@ describe("queue", async () => {
 
     const jobData = [{ color: "red" }, { color: "green" }, { color: "blue" }];
 
-    const { ids } = queue.addMany("paint", jobData);
+    const { ids } = await queue.addMany("paint", jobData);
 
     expect(ids).toHaveLength(3);
 
     for (let i = 0; i < ids.length; i++) {
-      const job = queue.getJobById(ids[i]!);
+      const job = await queue.getJobById(ids[i]!);
       if (!job) throw new Error(`Job ${ids[i]} not found`);
       expect(job.type).toBe("paint");
       expect(JSON.parse(job.data)).toEqual(jobData[i]);
       expect(job.status).toBe(JobStatus.Pending);
     }
 
-    expect(queue.countJobs({ type: "paint" })).toBe(3);
+    expect(await queue.countJobs({ type: "paint" })).toBe(3);
 
-    queue.close();
+    await queue.close();
   });
 
   it("should add a job to the queue with a custom serializer", async () => {
@@ -58,9 +58,9 @@ describe("queue", async () => {
       serializer: customSerializer,
     });
 
-    queue.add("customSerialize", { b: 2, a: 1, c: 3 });
+    await queue.add("customSerialize", { b: 2, a: 1, c: 3 });
 
-    const job = queue.getAndMarkJobAsProcessing("customSerialize");
+    const job = await queue.getAndMarkJobAsProcessing("customSerialize");
     if (!job) throw new Error("Job not found");
 
     expect(job.data).toBe('[["a",1],["b",2],["c",3]]');
@@ -68,71 +68,71 @@ describe("queue", async () => {
     const parsedData = JSON.parse(job.data);
     expect(Object.fromEntries(parsedData)).toEqual({ a: 1, b: 2, c: 3 });
 
-    queue.close();
+    await queue.close();
   });
 
   it("should mark jobs as done or failed", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
-    queue.add("test", { step: 1 });
-    const job = queue.getAndMarkJobAsProcessing("test");
+    await queue.add("test", { step: 1 });
+    const job = await queue.getAndMarkJobAsProcessing("test");
     if (!job) throw new Error("job not found");
     expect(job.status).toBe(JobStatus.Processing);
 
-    queue.markJobAsDone(job.id);
+    await queue.markJobAsDone(job.id);
 
-    queue.add("test", { step: 2 });
-    const failedJob = queue.getAndMarkJobAsProcessing("test");
+    await queue.add("test", { step: 2 });
+    const failedJob = await queue.getAndMarkJobAsProcessing("test");
     if (!failedJob) throw new Error("job not found");
-    queue.markJobAsFailed(failedJob.id, "test error");
-    const found = queue.getJobById(failedJob.id);
+    await queue.markJobAsFailed(failedJob.id, "test error");
+    const found = await queue.getJobById(failedJob.id);
     expect(found?.status).toBe(JobStatus.Failed);
     expect(found?.error).toBe("test error");
   });
 
-  it("should throw an error when adding a job with an invalid cron expression", () => {
+  it("should throw an error when adding a job with an invalid cron expression", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
 
-    expect(() => {
-      queue.schedule("invalid", { cron: "invalid cron expression" });
-    }).toThrow("invalid cron expression provided");
+    await expect(
+      queue.schedule("invalid", { cron: "invalid cron expression" })
+    ).rejects.toThrow("invalid cron expression provided");
   });
 
   it("should get and mark scheduled job as processing", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
 
-    queue.schedule("scheduled", { cron: "* * * * *" });
+    await queue.schedule("scheduled", { cron: "* * * * *" });
 
-    const job = queue.getAndMarkScheduledJobAsProcessing();
+    const job = await queue.getAndMarkScheduledJobAsProcessing();
     if (!job) throw new Error("Job not found");
     expect(job).toBeDefined();
     expect(job?.status).toBe(JobStatus.Processing);
 
-    const updatedJob = queue.getScheduledJobById(job.id);
+    const updatedJob = await queue.getScheduledJobById(job.id);
     expect(updatedJob?.status).toBe(JobStatus.Processing);
 
-    queue.close();
+    await queue.close();
   });
 
   it("should mark scheduled job as idle with next run time", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
 
-    const { id } = queue.schedule("scheduled", { cron: "* * * * * *" });
+    const { id } = await queue.schedule("scheduled", { cron: "* * * * * *" });
 
-    const job = queue.getAndMarkScheduledJobAsProcessing();
+    const job = await queue.getAndMarkScheduledJobAsProcessing();
     expect(job).toBeDefined();
 
     const nextRun = Date.now() + 60000; // 1 minute from now
-    queue.markScheduledJobAsIdle(id, nextRun);
+    await queue.markScheduledJobAsIdle(id, nextRun);
 
-    const updatedJob = queue.getScheduledJobById(id);
+    const updatedJob = await queue.getScheduledJobById(id);
     expect(updatedJob?.status).toBe(ScheduledJobStatus.Idle);
     expect(updatedJob?.nextRun).toBe(nextRun);
 
-    queue.close();
+    await queue.close();
   });
 
   it("should requeue timed out jobs", async () => {
@@ -143,19 +143,19 @@ describe("queue", async () => {
       maintenanceInterval: 20,
     });
 
-    const { id } = queue.add("test", { value: "timeout test" });
+    const { id } = await queue.add("test", { value: "timeout test" });
 
-    const job = queue.getAndMarkJobAsProcessing("test");
+    const job = await queue.getAndMarkJobAsProcessing("test");
     expect(job).toBeDefined();
     expect(job?.id).toBe(id);
     expect(job?.status).toBe(JobStatus.Processing);
 
     await new Promise((resolve) => setTimeout(resolve, 80));
 
-    const requeuedJob = queue.getJobById(id);
+    const requeuedJob = await queue.getJobById(id);
     expect(requeuedJob?.status).toBe(JobStatus.Pending);
 
-    queue.close();
+    await queue.close();
   });
 
   it("should remove done jobs older than specified time", async () => {
@@ -165,22 +165,22 @@ describe("queue", async () => {
       removeDoneJobsOlderThan: 20,
     });
 
-    const { id: oldJobId } = queue.add("test", { value: "old job" });
-    const oldJob = queue.getAndMarkJobAsProcessing("test");
-    if (oldJob) queue.markJobAsDone(oldJob.id);
+    const { id: oldJobId } = await queue.add("test", { value: "old job" });
+    const oldJob = await queue.getAndMarkJobAsProcessing("test");
+    if (oldJob) await queue.markJobAsDone(oldJob.id);
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const { id: newJobId } = queue.add("test", { value: "new job" });
-    const newJob = queue.getAndMarkJobAsProcessing("test");
-    if (newJob) queue.markJobAsDone(newJob.id);
+    const { id: newJobId } = await queue.add("test", { value: "new job" });
+    const newJob = await queue.getAndMarkJobAsProcessing("test");
+    if (newJob) await queue.markJobAsDone(newJob.id);
 
-    queue.removeDoneJobs(20);
+    await queue.removeDoneJobs(20);
 
-    expect(queue.getJobById(oldJobId)).toBeUndefined();
-    expect(queue.getJobById(newJobId)).toBeDefined();
+    expect(await queue.getJobById(oldJobId)).toBeUndefined();
+    expect(await queue.getJobById(newJobId)).toBeDefined();
 
-    queue.close();
+    await queue.close();
   });
 
   it("should remove failed jobs older than specified time", async () => {
@@ -190,74 +190,76 @@ describe("queue", async () => {
       removeFailedJobsOlderThan: 20,
     });
 
-    const { id: oldJobId } = queue.add("test", { value: "old job" });
-    const oldJob = queue.getAndMarkJobAsProcessing("test");
-    if (oldJob) queue.markJobAsFailed(oldJob.id, "Test error");
+    const { id: oldJobId } = await queue.add("test", { value: "old job" });
+    const oldJob = await queue.getAndMarkJobAsProcessing("test");
+    if (oldJob) await queue.markJobAsFailed(oldJob.id, "Test error");
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const { id: newJobId } = queue.add("test", { value: "new job" });
-    const newJob = queue.getAndMarkJobAsProcessing("test");
-    if (newJob) queue.markJobAsFailed(newJob.id, "Test error");
+    const { id: newJobId } = await queue.add("test", { value: "new job" });
+    const newJob = await queue.getAndMarkJobAsProcessing("test");
+    if (newJob) await queue.markJobAsFailed(newJob.id, "Test error");
 
-    queue.removeFailedJobs(20);
+    await queue.removeFailedJobs(20);
 
-    expect(queue.getJobById(oldJobId)).toBeUndefined();
-    expect(queue.getJobById(newJobId)).toBeDefined();
+    expect(await queue.getJobById(oldJobId)).toBeUndefined();
+    expect(await queue.getJobById(newJobId)).toBeDefined();
 
-    queue.close();
+    await queue.close();
   });
 
   it("should count jobs by type and status", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
 
-    queue.add("test1", { value: 1 });
-    queue.add("test1", { value: 2 });
-    queue.add("test2", { value: 3 });
-    queue.add("test3", { value: 3 });
-
-    expect(queue.countJobs({ type: "test1", status: JobStatus.Pending })).toBe(
-      2
-    );
-    expect(queue.countJobs({ type: "test2", status: JobStatus.Pending })).toBe(
-      1
-    );
-    expect(
-      queue.countJobs({ type: "test1", status: JobStatus.Processing })
-    ).toBe(0);
-    expect(queue.countJobs({ type: "test3" })).toBe(1);
-    expect(queue.countJobs({ status: JobStatus.Pending })).toBe(4);
-    expect(queue.countJobs()).toBe(4);
-
-    const job = queue.getAndMarkJobAsProcessing("test1");
+    await queue.add("test1", { value: 1 });
+    await queue.add("test1", { value: 2 });
+    await queue.add("test2", { value: 3 });
+    await queue.add("test3", { value: 3 });
 
     expect(
-      queue.countJobs({ type: "test1", status: JobStatus.Processing })
+      await queue.countJobs({ type: "test1", status: JobStatus.Pending })
+    ).toBe(2);
+    expect(
+      await queue.countJobs({ type: "test2", status: JobStatus.Pending })
     ).toBe(1);
-    expect(queue.countJobs({ type: "test1", status: JobStatus.Pending })).toBe(
-      1
-    );
-    expect(queue.countJobs({ status: JobStatus.Pending })).toBe(3);
+    expect(
+      await queue.countJobs({ type: "test1", status: JobStatus.Processing })
+    ).toBe(0);
+    expect(await queue.countJobs({ type: "test3" })).toBe(1);
+    expect(await queue.countJobs({ status: JobStatus.Pending })).toBe(4);
+    expect(await queue.countJobs()).toBe(4);
 
-    if (job) queue.markJobAsDone(job.id);
-    expect(queue.countJobs({ type: "test1", status: JobStatus.Done })).toBe(1);
-    expect(queue.countJobs({ status: JobStatus.Done })).toBe(1);
-    expect(queue.countJobs({ type: "test5" })).toBe(0);
-    expect(queue.countJobs()).toBe(4);
+    const job = await queue.getAndMarkJobAsProcessing("test1");
 
-    queue.close();
+    expect(
+      await queue.countJobs({ type: "test1", status: JobStatus.Processing })
+    ).toBe(1);
+    expect(
+      await queue.countJobs({ type: "test1", status: JobStatus.Pending })
+    ).toBe(1);
+    expect(await queue.countJobs({ status: JobStatus.Pending })).toBe(3);
+
+    if (job) await queue.markJobAsDone(job.id);
+    expect(
+      await queue.countJobs({ type: "test1", status: JobStatus.Done })
+    ).toBe(1);
+    expect(await queue.countJobs({ status: JobStatus.Done })).toBe(1);
+    expect(await queue.countJobs({ type: "test5" })).toBe(0);
+    expect(await queue.countJobs()).toBe(4);
+
+    await queue.close();
   });
 
   it("should return all scheduled jobs", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
 
-    queue.schedule("job1", { cron: "* * * * *" });
-    queue.schedule("job2", { cron: "0 0 * * *" });
-    queue.schedule("job3", { cron: "0 12 * * MON-FRI" });
+    await queue.schedule("job1", { cron: "* * * * *" });
+    await queue.schedule("job2", { cron: "0 0 * * *" });
+    await queue.schedule("job3", { cron: "0 12 * * MON-FRI" });
 
-    const scheduledJobs = queue.getScheduledJobs();
+    const scheduledJobs = await queue.getScheduledJobs();
 
     expect(scheduledJobs).toHaveLength(3);
     expect(scheduledJobs[0]?.type).toBe("job1");
@@ -267,50 +269,50 @@ describe("queue", async () => {
     expect(scheduledJobs[1]?.cronExpression).toBe("0 0 * * *");
     expect(scheduledJobs[2]?.cronExpression).toBe("0 12 * * MON-FRI");
 
-    queue.close();
+    await queue.close();
   });
 
   it("should return an empty array when no scheduled jobs exist", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
 
-    const scheduledJobs = queue.getScheduledJobs();
+    const scheduledJobs = await queue.getScheduledJobs();
 
     expect(scheduledJobs).toHaveLength(0);
     expect(scheduledJobs).toEqual([]);
 
-    queue.close();
+    await queue.close();
   });
 
   it("should return all unique job types", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
 
-    queue.add("type1", { data: "job1" });
-    queue.add("type2", { data: "job2" });
-    queue.add("type1", { data: "job3" });
-    queue.add("type3", { data: "job4" });
+    await queue.add("type1", { data: "job1" });
+    await queue.add("type2", { data: "job2" });
+    await queue.add("type1", { data: "job3" });
+    await queue.add("type3", { data: "job4" });
 
-    const jobTypes = queue.getJobTypes();
+    const jobTypes = await queue.getJobTypes();
 
     expect(jobTypes).toHaveLength(3);
     expect(jobTypes).toContain("type1");
     expect(jobTypes).toContain("type2");
     expect(jobTypes).toContain("type3");
 
-    queue.close();
+    await queue.close();
   });
 
   it("should return an empty array when no jobs exist", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
 
-    const jobTypes = queue.getJobTypes();
+    const jobTypes = await queue.getJobTypes();
 
     expect(jobTypes).toHaveLength(0);
     expect(jobTypes).toEqual([]);
 
-    queue.close();
+    await queue.close();
   });
 
   it("should call onDoneJobsRemoved when done jobs are removed", async () => {
@@ -324,17 +326,17 @@ describe("queue", async () => {
       },
     });
 
-    queue.add("test", { value: "old job" });
-    const job = queue.getAndMarkJobAsProcessing("test");
-    if (job) queue.markJobAsDone(job.id);
+    await queue.add("test", { value: "old job" });
+    const job = await queue.getAndMarkJobAsProcessing("test");
+    if (job) await queue.markJobAsDone(job.id);
 
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    queue.removeDoneJobs(10);
+    await queue.removeDoneJobs(10);
 
     expect(removedJobs).toBe(1);
 
-    queue.close();
+    await queue.close();
   });
 
   it("should call onFailedJobsRemoved when failed jobs are removed", async () => {
@@ -348,17 +350,17 @@ describe("queue", async () => {
       },
     });
 
-    queue.add("test", { value: "old job" });
-    const job = queue.getAndMarkJobAsProcessing("test");
-    if (job) queue.markJobAsFailed(job.id, "Test error");
+    await queue.add("test", { value: "old job" });
+    const job = await queue.getAndMarkJobAsProcessing("test");
+    if (job) await queue.markJobAsFailed(job.id, "Test error");
 
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    queue.removeFailedJobs(10);
+    await queue.removeFailedJobs(10);
 
     expect(removedJobs).toBe(1);
 
-    queue.close();
+    await queue.close();
   });
 
   it("should call onProcessingJobsRequeued when processing jobs are requeued", async () => {
@@ -372,45 +374,45 @@ describe("queue", async () => {
       },
     });
 
-    queue.add("test", { value: "timeout test" });
-    queue.getAndMarkJobAsProcessing("test");
+    await queue.add("test", { value: "timeout test" });
+    await queue.getAndMarkJobAsProcessing("test");
 
     await new Promise((resolve) => setTimeout(resolve, 20));
 
-    queue.requeueTimedOutJobs(10);
+    await queue.requeueTimedOutJobs(10);
 
     expect(requeuedJobs).toBe(1);
 
-    queue.close();
+    await queue.close();
   });
 
   it("should update an existing scheduled job when adding the same type with a different cron expression", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
 
-    const { id: initialId } = queue.schedule("updateTest", {
+    const { id: initialId } = await queue.schedule("updateTest", {
       cron: "0 * * * *",
     });
 
-    const initialJob = queue.getScheduledJobById(initialId);
+    const initialJob = await queue.getScheduledJobById(initialId);
     expect(initialJob).toBeDefined();
     expect(initialJob?.cronExpression).toBe("0 * * * *");
 
-    const { id: updatedId } = queue.schedule("updateTest", {
+    const { id: updatedId } = await queue.schedule("updateTest", {
       cron: "*/30 * * * *",
     });
 
     expect(updatedId).toBe(initialId);
 
-    const updatedJob = queue.getScheduledJobById(updatedId);
+    const updatedJob = await queue.getScheduledJobById(updatedId);
     expect(updatedJob).toBeDefined();
     expect(updatedJob?.cronExpression).toBe("*/30 * * * *");
 
-    const allJobs = queue.getScheduledJobs();
+    const allJobs = await queue.getScheduledJobs();
     const updateTestJobs = allJobs.filter((job) => job.type === "updateTest");
     expect(updateTestJobs).toHaveLength(1);
 
-    queue.close();
+    await queue.close();
   });
 });
 
@@ -427,8 +429,8 @@ describe("worker", async () => {
       { queue }
     );
 
-    queue.add("test", { value: 1 });
-    queue.add("test", { value: 2 });
+    await queue.add("test", { value: 1 });
+    await queue.add("test", { value: 2 });
 
     await processAll(queue, worker);
 
@@ -447,10 +449,10 @@ describe("worker", async () => {
       { queue }
     );
 
-    queue.schedule("scheduled", { cron: "* * * * *" });
+    await queue.schedule("scheduled", { cron: "* * * * *" });
 
     worker.start();
-    await worker.stop();
+    await processAll(queue, worker);
 
     expect(results[0]).toEqual({});
   });
@@ -459,10 +461,10 @@ describe("worker", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
 
-    const { id } = queue.add("paint", { color: "blue" });
+    const { id } = await queue.add("paint", { color: "blue" });
     expect(id).toBeDefined();
 
-    const job = queue.getJobById(id);
+    const job = await queue.getJobById(id);
     expect(job).toBeDefined();
     expect(job?.type).toBe("paint");
     expect(JSON.parse(job?.data as string)).toEqual({ color: "blue" });
@@ -471,7 +473,7 @@ describe("worker", async () => {
 
     await processAll(queue, worker);
 
-    const processedJob = queue.getJobById(id);
+    const processedJob = await queue.getJobById(id);
     expect(processedJob?.status).toBe(JobStatus.Done);
     expect(processedJob?.type).toBe("paint");
   });
@@ -484,10 +486,10 @@ describe("worker", async () => {
       maintenanceInterval: 40,
     });
 
-    const { id } = queue.add("test", { value: "timeout test" });
+    const { id } = await queue.add("test", { value: "timeout test" });
 
     // simulate worker dying
-    const job = queue.getAndMarkJobAsProcessing("test");
+    const job = await queue.getAndMarkJobAsProcessing("test");
     expect(job).toBeDefined();
     expect(job?.id).toBe(id);
     expect(job?.status).toBe(JobStatus.Processing);
@@ -512,7 +514,7 @@ describe("worker", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
 
-    const { id } = queue.add("test", { value: "error test" });
+    const { id } = await queue.add("test", { value: "error test" });
 
     const worker = defineWorker(
       "test",
@@ -524,7 +526,7 @@ describe("worker", async () => {
 
     await processAll(queue, worker);
 
-    const failedJob = queue.getJobById(id);
+    const failedJob = await queue.getJobById(id);
     expect(failedJob).toBeDefined();
     expect(failedJob?.status).toBe(JobStatus.Failed);
     expect(failedJob?.failedAt).toBeDefined();
@@ -536,7 +538,7 @@ describe("worker", async () => {
     const connection = new BetterSqlite3Database(":memory:");
     const queue = defineQueue({ connection });
 
-    const { id } = queue.schedule("paint", { cron: "* * * * * *" });
+    const { id } = await queue.schedule("paint", { cron: "* * * * * *" });
 
     const worker = defineWorker(
       "paint",
@@ -547,9 +549,9 @@ describe("worker", async () => {
     );
 
     worker.start();
-    await worker.stop();
+    await processAll(queue, worker);
 
-    const failedJob = queue.getJobById(id);
+    const failedJob = await queue.getJobById(id);
     expect(failedJob).toBeDefined();
     expect(failedJob?.status).toBe(JobStatus.Failed);
     expect(failedJob?.failedAt).toBeDefined();
@@ -569,7 +571,7 @@ describe("worker", async () => {
       },
     });
 
-    queue.add("test", { value: "processing test" });
+    await queue.add("test", { value: "processing test" });
     await processAll(queue, worker);
 
     expect(processingCalled).toBe(true);
@@ -587,7 +589,7 @@ describe("worker", async () => {
       },
     });
 
-    queue.add("test", { value: "completed test" });
+    await queue.add("test", { value: "completed test" });
     await processAll(queue, worker);
 
     expect(JSON.parse(completedJob.data)).toEqual({ value: "completed test" });
@@ -613,7 +615,7 @@ describe("worker", async () => {
       }
     );
 
-    queue.add("test", { value: "failed test" });
+    await queue.add("test", { value: "failed test" });
     await processAll(queue, worker);
 
     expect(JSON.parse(failedJob.data)).toEqual({ value: "failed test" });

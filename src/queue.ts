@@ -34,39 +34,48 @@ type QueueOptions = {
 /** A queue of jobs. */
 export type Queue = {
   /** Adds a new job to the queue. */
-  add: (type: string, data: unknown) => { id: number };
+  add: (type: string, data: unknown) => Promise<{ id: number }>;
   /** Adds multiple new jobs of the same type to the queue. */
-  addMany: (type: string, data: unknown[]) => { ids: number[] };
+  addMany: (type: string, data: unknown[]) => Promise<{ ids: number[] }>;
   /** Schedules a recurring job using a cron expression. */
-  schedule: (type: string, { cron }: { cron: string }) => { id: number };
+  schedule: (
+    type: string,
+    { cron }: { cron: string }
+  ) => Promise<{ id: number }>;
   /** Counts jobs in the queue, optionally filtered by type and/or status. */
-  countJobs: (opts?: { type?: string; status?: JobStatus }) => number;
+  countJobs: (opts?: { type?: string; status?: JobStatus }) => Promise<number>;
   /** Retrieves a job by its ID. */
-  getJobById: (id: number) => PersistedJob | undefined;
+  getJobById: (id: number) => Promise<PersistedJob | undefined>;
   /** Gets a list of all unique job types in the queue. */
-  getJobTypes: () => string[];
+  getJobTypes: () => Promise<string[]>;
   /** Retrieves all scheduled jobs. */
-  getScheduledJobs: () => PersistedScheduledJob[];
+  getScheduledJobs: () => Promise<PersistedScheduledJob[]>;
   /** Retrieves a scheduled job by its ID. */
-  getScheduledJobById: (id: number) => PersistedScheduledJob | undefined;
+  getScheduledJobById: (
+    id: number
+  ) => Promise<PersistedScheduledJob | undefined>;
   /** Requeues jobs that have exceeded the specified timeout. */
-  requeueTimedOutJobs: (timeout: number) => void;
+  requeueTimedOutJobs: (timeout: number) => Promise<void>;
   /** Removes completed jobs older than the specified duration. */
-  removeDoneJobs: (olderThan: number) => void;
+  removeDoneJobs: (olderThan: number) => Promise<void>;
   /** Removes failed jobs older than the specified duration. */
-  removeFailedJobs: (olderThan: number) => void;
+  removeFailedJobs: (olderThan: number) => Promise<void>;
   /** Fetches the next pending job of the specified type and marks it as processing. */
-  getAndMarkJobAsProcessing: (type: string) => PersistedJob | undefined;
+  getAndMarkJobAsProcessing: (
+    type: string
+  ) => Promise<PersistedJob | undefined>;
   /** Fetches the next scheduled job due for execution and marks it as processing. */
-  getAndMarkScheduledJobAsProcessing: () => PersistedScheduledJob | undefined;
+  getAndMarkScheduledJobAsProcessing: () => Promise<
+    PersistedScheduledJob | undefined
+  >;
   /** Marks a job as completed. */
-  markJobAsDone: (id: number) => void;
+  markJobAsDone: (id: number) => Promise<void>;
   /** Marks a job as failed with an error message. */
-  markJobAsFailed: (id: number, error: string) => void;
+  markJobAsFailed: (id: number, error: string) => Promise<void>;
   /** Marks a scheduled job as idle and sets its next execution time. */
-  markScheduledJobAsIdle: (id: number, nextRun: number) => void;
+  markScheduledJobAsIdle: (id: number, nextRun: number) => Promise<void>;
   /** Closes the queue, stopping maintenance tasks and releasing resources. */
-  close: () => void;
+  close: () => Promise<void>;
 };
 
 export function defineQueue(opts: QueueOptions): Queue {
@@ -243,7 +252,7 @@ export function defineQueue(opts: QueueOptions): Queue {
   `);
 
   const queue: Queue = {
-    add(type: string, data: unknown): { id: number } {
+    async add(type: string, data: unknown): Promise<{ id: number }> {
       const serializedData = serializer(data);
       const result = insertJobStmt.run({
         type,
@@ -252,7 +261,10 @@ export function defineQueue(opts: QueueOptions): Queue {
       });
       return { id: result.lastInsertRowid as number };
     },
-    addMany(type: string, dataList: unknown[]): { ids: number[] } {
+    async addMany(
+      type: string,
+      dataList: unknown[]
+    ): Promise<{ ids: number[] }> {
       const now = Date.now();
       const ids: number[] = [];
       const insertManyJobs = db.transaction(
@@ -272,7 +284,10 @@ export function defineQueue(opts: QueueOptions): Queue {
       insertManyJobs(jobs);
       return { ids };
     },
-    schedule(type: string, { cron }: { cron: string }): { id: number } {
+    async schedule(
+      type: string,
+      { cron }: { cron: string }
+    ): Promise<{ id: number }> {
       try {
         parseCron(cron);
       } catch (error) {
@@ -303,7 +318,10 @@ export function defineQueue(opts: QueueOptions): Queue {
       });
       return { id: result.lastInsertRowid as number };
     },
-    countJobs(opts?: { type?: string; status?: JobStatus }) {
+    async countJobs(opts?: {
+      type?: string;
+      status?: JobStatus;
+    }): Promise<number> {
       if (opts?.type && opts?.status !== undefined) {
         const result = countJobsByTypeAndStatusStmt.get({
           type: opts.type,
@@ -327,23 +345,25 @@ export function defineQueue(opts: QueueOptions): Queue {
       const result = countJobsStmt.get() as { "COUNT(*)": number };
       return result["COUNT(*)"];
     },
-    getJobById(id: number): PersistedJob | undefined {
+    async getJobById(id: number): Promise<PersistedJob | undefined> {
       return getJobByIdStmt.get(id) as PersistedJob | undefined;
     },
-    getJobTypes() {
+    async getJobTypes(): Promise<string[]> {
       const result = getJobTypesStmt.all() as { type: string }[];
       return result.map((row) => row.type);
     },
-    getScheduledJobs() {
+    async getScheduledJobs(): Promise<PersistedScheduledJob[]> {
       const result = getScheduledJobsStmt.all() as PersistedScheduledJob[];
       return result;
     },
-    getScheduledJobById(id: number): PersistedScheduledJob | undefined {
+    async getScheduledJobById(
+      id: number
+    ): Promise<PersistedScheduledJob | undefined> {
       return getScheduledJobByIdStmt.get(id) as
         | PersistedScheduledJob
         | undefined;
     },
-    requeueTimedOutJobs(timeout: number) {
+    async requeueTimedOutJobs(timeout: number): Promise<void> {
       const now = Date.now();
       const result = requeueTimedOutJobsStmt.run({ threshold: now - timeout });
       log.debug(`requeued ${result.changes} timed out jobs`);
@@ -351,7 +371,7 @@ export function defineQueue(opts: QueueOptions): Queue {
         opts.onProcessingJobsRequeued(result.changes);
       }
     },
-    removeDoneJobs(olderThan: number) {
+    async removeDoneJobs(olderThan: number): Promise<void> {
       const now = Date.now();
       const result = removeDoneJobsStmt.run({ threshold: now - olderThan });
       log.debug(`removed ${result.changes} done jobs`);
@@ -359,7 +379,7 @@ export function defineQueue(opts: QueueOptions): Queue {
         opts.onDoneJobsRemoved(result.changes);
       }
     },
-    removeFailedJobs(olderThan: number) {
+    async removeFailedJobs(olderThan: number): Promise<void> {
       const now = Date.now();
       const result = removeFailedJobsStmt.run({ threshold: now - olderThan });
       log.debug(`removed ${result.changes} failed jobs`);
@@ -367,12 +387,16 @@ export function defineQueue(opts: QueueOptions): Queue {
         opts.onFailedJobsRemoved(result.changes);
       }
     },
-    getAndMarkJobAsProcessing(type: string): PersistedJob | undefined {
+    async getAndMarkJobAsProcessing(
+      type: string
+    ): Promise<PersistedJob | undefined> {
       return getAndMarkJobAsProcessingStmt.get({
         type,
       }) as PersistedJob | undefined;
     },
-    getAndMarkScheduledJobAsProcessing(): PersistedScheduledJob | undefined {
+    async getAndMarkScheduledJobAsProcessing(): Promise<
+      PersistedScheduledJob | undefined
+    > {
       return db
         .transaction((): PersistedScheduledJob | undefined => {
           const job = getNextScheduledJobStmt.get({
@@ -391,24 +415,24 @@ export function defineQueue(opts: QueueOptions): Queue {
         })
         .immediate();
     },
-    markJobAsDone(id: number) {
-      return updateJobStatusStmt.run({ status: JobStatus.Done, id });
+    async markJobAsDone(id: number): Promise<void> {
+      updateJobStatusStmt.run({ status: JobStatus.Done, id });
     },
-    markJobAsFailed(id: number, error: string) {
-      return failJobStmt.run({
+    async markJobAsFailed(id: number, error: string): Promise<void> {
+      failJobStmt.run({
         failedAt: Date.now(),
         error,
         id,
       });
     },
-    markScheduledJobAsIdle(id: number, nextRun: number) {
-      return updateScheduledJobStatusStmt.run({
+    async markScheduledJobAsIdle(id: number, nextRun: number): Promise<void> {
+      updateScheduledJobStatusStmt.run({
         status: ScheduledJobStatus.Idle,
         id,
         nextRun,
       });
     },
-    close() {
+    async close(): Promise<void> {
       if (maintenanceTimeout) {
         clearInterval(maintenanceTimeout);
       }
