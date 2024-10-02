@@ -1,6 +1,6 @@
 # plainjob
 
-A SQLite-backed job queue for better-sqlite3 and bun:sqlite processing 15k jobs/s.
+A SQLite-backed job queue for `better-sqlite3` and `bun:sqlite` processing 15k jobs/s.
 
 ## Getting Started
 
