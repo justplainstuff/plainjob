@@ -1,19 +1,33 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig",
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "dist", "vitest.config.ts"],
+  "exclude": ["node_modules", "dist"],
   "compilerOptions": {
-    "declaration": true,
-    "declarationMap": true,
-    "esModuleInterop": true,
-    "incremental": false,
-    "isolatedModules": true,
-    "lib": ["es2022"],
+    // enable latest features
+    "lib": ["ESNext"],
+    "target": "ESNext",
     "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "noUncheckedIndexedAccess": true,
-    "resolveJsonModule": true,
-    "skipLibCheck": true,
+    "moduleDetection": "force",
+    "allowJs": true,
+
+    // bundler mode
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+
+    // best practices
     "strict": true,
-    "target": "ES2022"
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+
+    // some stricter flags (disabled by default)
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noPropertyAccessFromIndexSignature": false,
+    "noUncheckedIndexedAccess": true
   }
 }

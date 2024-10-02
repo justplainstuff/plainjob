@@ -1,10 +1,10 @@
 {
-  "name": "plainjobs",
+  "name": "plainjob",
   "version": "0.0.4",
-  "description": "A queue based on SQLite capable of processing 40k jobs/s.",
-  "type": "commonjs",
-  "main": "dist/plainjobs.js",
-  "types": "dist/plainjobs.d.ts",
+  "description": "A queue based on SQLite capable of processing 15k jobs/s.",
+  "type": "module",
+  "main": "dist/plainjob.js",
+  "types": "dist/plainjob.d.ts",
   "files": [
     "dist",
     "src",
@@ -13,17 +13,20 @@
     "README.md"
   ],
   "scripts": {
-    "test": "vitest run",
-    "coverage": "vitest run --coverage",
-    "build": "tsc --noEmit src/plainjobs.ts && tsup",
-    "bench": "tsx tests/bench.ts",
-    "check": "pnpm build && pnpm test && pnpm bench",
+    "build": "tsc --noEmit && tsup",
+    "test:better": "vitest run test/better.test.ts",
+    "test:bun": "bun test test/bun.test.ts",
+    "bench:better": "tsx bench/better.ts",
+    "bench:bun": "bun run bench/bun.ts",
+    "check": "bun run test:better && bun run test:bun && bun run bench:better && bun run bench:bun",
     "publish": "changelogen --release --publish"
   },
   "keywords": [
     "plainjob",
     "plainstack",
     "sqlite",
+    "bun",
+    "better-sqlite3",
     "typescript",
     "queue"
   ],
@@ -32,18 +35,14 @@
   "dependencies": {
     "cron-parser": "^4.9.0"
   },
-  "peerDependencies": {
-    "better-sqlite3": "^11.0.0"
-  },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.10",
-    "@types/node": "^20",
-    "@vitest/coverage-v8": "^2.0.3",
+    "@types/bun": "latest",
     "better-sqlite3": "^11.0.0",
     "changelogen": "^0.5.5",
     "tsup": "^8.2.4",
-    "tsx": "^4.16.2",
+    "tsx": "^4.19.1",
     "typescript": "^5.5.4",
-    "vitest": "^2.0.1"
+    "vitest": "^2.1.1"
   }
 }

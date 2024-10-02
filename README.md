@@ -1,23 +1,49 @@
-# plainjobs
+# plainjob
 
-A SQLite-backed job queue processing 15k jobs/s.
+A SQLite-backed job queue for better-sqlite3 and bun:sqlite processing 15k jobs/s.
 
 ## Getting Started
 
-Install plainjobs:
+Node:
 
 ```bash
-npm install plainjobs
+npm install plainjob better-sqlite3
 ```
 
-Here's a minimal example to get you started:
+Create a queue:
 
 ```typescript
+import { better, defineQueue } from "plainjob";
 import Database from "better-sqlite3";
-import { defineQueue, defineWorker } from "plainjobs";
 
-const db = new Database("queue.db");
-const queue = defineQueue({ connection: db });
+const connection = better(new Database("data.db"));
+const queue = defineQueue({ connection });
+```
+
+Bun:
+
+```bash
+bun add plainjob
+```
+
+Create a queue:
+
+```typescript
+import { bun, defineQueue } from "plainjob";
+import Database from "bun:sqlite";
+
+const connection = bun(new Database("data.db", { strict: true }));
+const queue = defineQueue({ connection });
+```
+
+Here's a minimal example:
+
+```typescript
+import { bun, defineQueue, defineWorker } from "plainjob";
+import Database from "bun:sqlite";
+
+const connection = bun(new Database("data.db", { strict: true }));
+const queue = defineQueue({ connection });
 
 // Define a worker
 const worker = defineWorker(
@@ -29,7 +55,7 @@ const worker = defineWorker(
 );
 
 // Add a job
-queue.add("print", "Hello, plainjobs!");
+queue.add("print", "Hello, plainjob!");
 
 // Start the worker
 worker.start();
@@ -50,12 +76,12 @@ worker.start();
 ### Creating a Queue
 
 ```typescript
-import Database from "better-sqlite3";
-import { defineQueue } from "plainjobs";
+import { bun, defineQueue } from "plainjob";
+import Database from "bun:sqlite";
 
-const db = new Database("queue.db");
+const connection = bun(new Database("data.db", { strict: true }));
 const queue = defineQueue({
-  connection: db,
+  connection,
   timeout: 30 * 60 * 1000, // 30 minutes
   removeDoneJobsOlderThan: 7 * 24 * 60 * 60 * 1000, // 7 days
   removeFailedJobsOlderThan: 30 * 24 * 60 * 60 * 1000, // 30 days
@@ -75,7 +101,7 @@ queue.schedule("daily-report", { cron: "0 0 * * *" });
 ### Defining Workers
 
 ```typescript
-import { defineWorker } from "plainjobs";
+import { defineWorker } from "plainjob";
 
 const worker = defineWorker(
   "send-email",
@@ -113,7 +139,7 @@ const scheduledJobs = queue.getScheduledJobs();
 To ensure all jobs are processed before shutting down:
 
 ```typescript
-import { processAll } from "plainjobs";
+import { processAll } from "plainjob";
 
 process.on("SIGTERM", async () => {
   console.log("Shutting down...");
@@ -146,10 +172,10 @@ In `worker.ts`:
 
 ```typescript
 import Database from "better-sqlite3";
-import { defineQueue, defineWorker, processAll } from "plainjobs";
+import { better, defineQueue, defineWorker, processAll } from "plainjob";
 
 const dbUrl = process.argv[2];
-const connection = new Database(dbUrl);
+const connection = better(new Database(dbUrl));
 const queue = defineQueue({ connection });
 
 const worker = defineWorker(

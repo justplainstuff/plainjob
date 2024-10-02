@@ -1,9 +1,9 @@
 import { type ChildProcess, fork } from "node:child_process";
 import path from "node:path";
-import Database from "better-sqlite3";
-import { defineQueue, defineWorker, JobStatus } from "../src/plainjobs";
-import type { Job, Logger, Queue, Worker } from "../src/plainjobs";
+import { defineQueue, defineWorker, JobStatus } from "../src/plainjob";
+import type { Job, Logger, Queue } from "../src/plainjob";
 import { processAll } from "../src/worker";
+import { type Connection } from "../src/queue";
 
 const logger: Logger = {
   error: console.error,
@@ -20,8 +20,8 @@ function queueJobs(queue: Queue, count: number) {
   queue.addMany("bench", jobs);
 }
 
-async function runScenario(
-  dbUrl: string,
+export async function runScenario(
+  connection: Connection,
   jobCount: number,
   concurrent: number,
   parallel: number
@@ -30,10 +30,9 @@ async function runScenario(
     `running scenario - jobs: ${jobCount}, workers: ${concurrent}, parallel workers: ${parallel}`
   );
 
-  const connection = new Database(dbUrl);
   const queue = defineQueue({ connection, logger });
-  connection.exec(`DELETE FROM plainjobs_jobs`);
-  connection.exec(`DELETE FROM plainjobs_scheduled_jobs`);
+  connection.exec(`DELETE FROM plainjob_jobs`);
+  connection.exec(`DELETE FROM plainjob_scheduled_jobs`);
 
   queueJobs(queue, jobCount);
 
@@ -53,7 +52,7 @@ async function runScenario(
   }
 
   for (let i = 0; i < parallel; i++) {
-    workerPromises.push(spawnWorkerProcess(dbUrl));
+    workerPromises.push(spawnWorkerProcess(connection));
   }
 
   await Promise.all(workerPromises);
@@ -78,7 +77,7 @@ async function runScenario(
   const elapsed = Date.now() - start;
   const jobsPerSecond = jobCount / (elapsed / 1000);
 
-  console.log(`database: ${dbUrl}`);
+  console.log(`database: ${connection.filename}`);
   console.log(`jobs: ${jobCount}`);
   console.log(`concurrent workers: ${concurrent}`);
   console.log(`parallel workers: ${parallel}`);
@@ -89,10 +88,16 @@ async function runScenario(
   return jobsPerSecond;
 }
 
-function spawnWorkerProcess(dbUrl: string): Promise<void> {
+function spawnWorkerProcess(connection: Connection): Promise<void> {
   return new Promise((resolve, reject) => {
-    const workerPath = path.join(__dirname, "bench-worker");
-    const child: ChildProcess = fork(workerPath, [dbUrl]);
+    const workerPath = path.join(
+      import.meta.dirname,
+      connection.driver === "bun:sqlite" ? "worker-bun" : "worker-better"
+    );
+    const child: ChildProcess = fork(workerPath, [
+      connection.filename,
+      connection.driver,
+    ]);
 
     child.on("exit", (code) => {
       if (code === 0) {
@@ -103,20 +108,3 @@ function spawnWorkerProcess(dbUrl: string): Promise<void> {
     });
   });
 }
-
-async function runScenarios() {
-  await runScenario("bench.db", 50000, 0, 2);
-  await runScenario(":memory:", 1000, 1, 0);
-  await runScenario(":memory:", 4000, 4, 0);
-  await runScenario(":memory:", 8000, 8, 0);
-  await runScenario("bench.db", 100, 0, 1);
-  await runScenario("bench.db", 1000, 0, 1);
-  await runScenario("bench.db", 2000, 0, 2);
-  await runScenario("bench.db", 4000, 0, 4);
-  await runScenario("bench.db", 8000, 0, 8);
-  await runScenario("bench.db", 16000, 0, 16);
-  await runScenario("bench.db", 32000, 0, 32);
-  await runScenario("bench.db", 64000, 0, 64);
-}
-
-runScenarios().catch(console.error);

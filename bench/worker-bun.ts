@@ -1,7 +1,8 @@
-import Database from "better-sqlite3";
-import { defineQueue, defineWorker } from "../src/plainjobs";
-import type { Job, Logger } from "../src/plainjobs";
+import { defineQueue, defineWorker } from "../src/plainjob";
+import type { Job, Logger } from "../src/plainjob";
 import { processAll } from "../src/worker";
+import { bun } from "../src/queue";
+import { Database as Bun } from "bun:sqlite";
 
 const logger: Logger = {
   error: console.error,
@@ -10,14 +11,14 @@ const logger: Logger = {
   debug: () => {},
 };
 
-const dbUrl = process.argv[2];
+const filename = process.argv[2];
 
-if (!dbUrl) {
+if (!filename) {
   console.error("invalid database url specified");
   process.exit(1);
 }
 
-const connection = new Database(dbUrl);
+const connection = bun(new Bun(filename, { strict: true }));
 
 const queue = defineQueue({ connection, logger });
 const worker = defineWorker("bench", async (job: Job) => Promise.resolve(), {

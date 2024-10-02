@@ -7,21 +7,43 @@ on:
     branches: [main]
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
+  check-bun:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
         name: checkout code 📥
-      - name: install pnpm 📦
-        uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          version: 9.5.0
+          bun-version: 1.1.29
+      - name: install dependencies 🔧
+        run: bun install
+      - name: build ✅
+        run: bun run build
+      - name: test ✅
+        run: bun run test:bun
+      - name: bench ✅
+        run: bun run bench:bun
+
+  check-better:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        name: checkout code 📥
       - name: setup node 🟢
         uses: actions/setup-node@v4
         with:
           node-version: "20.10.0"
-          cache: "pnpm"
       - name: install dependencies 🔧
-        run: pnpm install
-      - name: run check ✅
-        run: pnpm check
+        run: npm install
+      - name: build ✅
+        run: npm run build
+      - name: run test ✅
+        run: npm run test:better
+      - name: run bench ✅
+        run: npm run bench:better

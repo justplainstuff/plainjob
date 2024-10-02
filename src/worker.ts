@@ -1,4 +1,4 @@
-import { parseExpression as parseCron } from "cron-parser";
+import cronParser from "cron-parser";
 import { JobStatus, type Job, type Logger } from "./jobs";
 import type { Queue } from "./queue";
 
@@ -49,7 +49,8 @@ export function defineWorker(
       log.debug(
         `worker [${id}] processing scheduled job '${scheduledJob.id}' '${scheduledJob.type}'`
       );
-      const nextRun = parseCron(scheduledJob.cronExpression)
+      const nextRun = cronParser
+        .parseExpression(scheduledJob.cronExpression)
         .next()
         .toDate()
         .getTime();

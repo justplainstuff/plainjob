@@ -1,16 +1,75 @@
-import type { Database } from "better-sqlite3";
-import { parseExpression as parseCron } from "cron-parser";
+import type {
+  Database as BetterSqlite3Database,
+  Transaction,
+} from "better-sqlite3";
+import type { Database as BunSqliteDatabase } from "bun:sqlite";
+import cronParser from "cron-parser";
 import {
   JobStatus,
-  Logger,
-  PersistedJob,
-  PersistedScheduledJob,
+  type Logger,
+  type PersistedJob,
+  type PersistedScheduledJob,
   ScheduledJobStatus,
 } from "./jobs";
 
+type VariableArgFunction = (...params: any[]) => unknown;
+
+interface GenericStatement {
+  run: (...params: any) => {
+    changes: number;
+    lastInsertRowid: number | bigint;
+  };
+  get: VariableArgFunction;
+  all: VariableArgFunction;
+}
+
+export interface Connection {
+  driver: "bun:sqlite" | "better-sqlite3";
+  filename: string;
+  pragma: (stmt: string) => void;
+  exec: (stmt: string) => void;
+  prepare: (stmt: string) => GenericStatement;
+  transaction<F extends VariableArgFunction>(fn: F): Transaction<F>;
+  close: () => void;
+}
+
+export function better(database: BetterSqlite3Database): Connection {
+  return {
+    driver: "better-sqlite3",
+    filename: database.name,
+    pragma: database.pragma.bind(database),
+    transaction: database.transaction.bind(database) as <
+      F extends VariableArgFunction
+    >(
+      fn: F
+    ) => Transaction<F>,
+    exec: database.exec.bind(database),
+    prepare: database.prepare.bind(database),
+    close: database.close.bind(database),
+  };
+}
+
+export function bun(database: BunSqliteDatabase): Connection {
+  return {
+    driver: "bun:sqlite",
+    filename: database.filename,
+    pragma: (stmt: string) => {
+      database.exec(`PRAGMA ${stmt};`);
+    },
+    transaction: database.transaction.bind(database) as <
+      F extends VariableArgFunction
+    >(
+      fn: F
+    ) => Transaction<F>,
+    exec: database.exec.bind(database),
+    prepare: database.query.bind(database),
+    close: database.close.bind(database),
+  };
+}
+
 type QueueOptions = {
-  /** A better-sqlite3 database connection. */
-  connection: Database;
+  /** A SQLite database connection, supports better-sqlite3 and bun:sqlite. */
+  connection: Connection;
   /** An optional logger, defaults to console. Winston compatible. */
   logger?: Logger;
   /** Job gets re-queued after this time in milliseconds, defaults to 30min. */
@@ -78,7 +137,7 @@ export function defineQueue(opts: QueueOptions): Queue {
     opts.removeDoneJobsOlderThan || 7 * 24 * 60 * 60 * 1000; // 7 days
   const removeFailedJobsOlderThan =
     opts.removeFailedJobsOlderThan || 30 * 24 * 60 * 60 * 1000; // 30 days
-  let maintenanceTimeout: NodeJS.Timeout;
+  let maintenanceTimeout: Timer;
   const serializer = opts.serializer || ((data) => JSON.stringify(data));
 
   db.pragma("journal_mode = WAL");
@@ -86,7 +145,7 @@ export function defineQueue(opts: QueueOptions): Queue {
   db.pragma("busy_timeout = 5000");
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS plainjobs_jobs (
+    CREATE TABLE IF NOT EXISTS plainjob_jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL,
       data TEXT NOT NULL,
@@ -96,9 +155,9 @@ export function defineQueue(opts: QueueOptions): Queue {
       created_at INTEGER NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_jobs_status_type_created_at ON plainjobs_jobs (status, type, created_at);
+    CREATE INDEX IF NOT EXISTS idx_jobs_status_type_created_at ON plainjob_jobs (status, type, created_at);
 
-    CREATE TABLE IF NOT EXISTS plainjobs_scheduled_jobs (
+    CREATE TABLE IF NOT EXISTS plainjob_scheduled_jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL UNIQUE,
       status INTEGER DEFAULT 0 NOT NULL,
@@ -107,16 +166,16 @@ export function defineQueue(opts: QueueOptions): Queue {
       created_at INTEGER NOT NULL
     );
 
-    CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_status_type_next_run ON plainjobs_scheduled_jobs (status, type, next_run);
+    CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_status_type_next_run ON plainjob_scheduled_jobs (status, type, next_run);
   `);
 
   const removeDoneJobsStmt = db.prepare(`
-    DELETE FROM plainjobs_jobs 
+    DELETE FROM plainjob_jobs 
     WHERE status = ${JobStatus.Done} AND created_at < @threshold
   `);
 
   const removeFailedJobsStmt = db.prepare(`
-    DELETE FROM plainjobs_jobs 
+    DELETE FROM plainjob_jobs 
     WHERE status = ${JobStatus.Failed} AND failed_at < @threshold
   `);
 
@@ -128,23 +187,21 @@ export function defineQueue(opts: QueueOptions): Queue {
     }, maintenanceInterval);
   }
 
-  const countJobsStmt = db.prepare("SELECT COUNT(*) FROM plainjobs_jobs");
+  const countJobsStmt = db.prepare("SELECT COUNT(*) FROM plainjob_jobs");
 
   const countJobsByTypeAndStatusStmt = db.prepare(
-    "SELECT COUNT(*) FROM plainjobs_jobs WHERE status = @status AND type = @type"
+    "SELECT COUNT(*) FROM plainjob_jobs WHERE status = @status AND type = @type"
   );
 
   const countJobsByStatusStmt = db.prepare(
-    "SELECT COUNT(*) FROM plainjobs_jobs WHERE status = @status"
+    "SELECT COUNT(*) FROM plainjob_jobs WHERE status = @status"
   );
 
   const countJobsByTypeStmt = db.prepare(
-    "SELECT COUNT(*) FROM plainjobs_jobs WHERE type = @type"
+    "SELECT COUNT(*) FROM plainjob_jobs WHERE type = @type"
   );
 
-  const getJobTypesStmt = db.prepare(
-    "SELECT DISTINCT type FROM plainjobs_jobs"
-  );
+  const getJobTypesStmt = db.prepare("SELECT DISTINCT type FROM plainjob_jobs");
 
   const getJobByIdStmt = db.prepare(`
     SELECT 
@@ -155,7 +212,7 @@ export function defineQueue(opts: QueueOptions): Queue {
       created_at as createdAt,
       failed_at as failedAt,
       error
-    FROM plainjobs_jobs 
+    FROM plainjob_jobs 
     WHERE id = ?
   `);
 
@@ -167,7 +224,7 @@ export function defineQueue(opts: QueueOptions): Queue {
       created_at as createdAt,
       cron_expression as cronExpression,
       next_run as nextRun
-    FROM plainjobs_scheduled_jobs 
+    FROM plainjob_scheduled_jobs 
     WHERE id = ?
   `);
 
@@ -179,7 +236,7 @@ export function defineQueue(opts: QueueOptions): Queue {
       created_at as createdAt,
       cron_expression as cronExpression,
       next_run as nextRun
-    FROM plainjobs_scheduled_jobs 
+    FROM plainjob_scheduled_jobs 
     WHERE type = @type
   `);
 
@@ -191,31 +248,40 @@ export function defineQueue(opts: QueueOptions): Queue {
       created_at as createdAt,
       cron_expression as cronExpression,
       next_run as nextRun
-    FROM plainjobs_scheduled_jobs
+    FROM plainjob_scheduled_jobs
     ORDER BY created_at
   `);
 
   const insertJobStmt = db.prepare(
-    "INSERT INTO plainjobs_jobs (type, data, created_at) VALUES (@type, @data, @createdAt)"
+    "INSERT INTO plainjob_jobs (type, data, created_at) VALUES (@type, @data, @createdAt)"
   );
 
   const insertScheduledJobStmt = db.prepare(
-    "INSERT INTO plainjobs_scheduled_jobs (type, cron_expression, next_run, created_at) VALUES (@type, @cronExpression, @nextRun, @createdAt)"
+    "INSERT INTO plainjob_scheduled_jobs (type, cron_expression, next_run, created_at) VALUES (@type, @cronExpression, @nextRun, @createdAt)"
   );
 
   const updateScheduledJobCronExpressionStmt = db.prepare(`
-    UPDATE plainjobs_scheduled_jobs SET cron_expression = @cronExpression WHERE id = @id
+    UPDATE plainjob_scheduled_jobs SET cron_expression = @cronExpression WHERE id = @id
   `);
 
   const requeueTimedOutJobsStmt = db.prepare(`
-    UPDATE plainjobs_jobs SET status = ${JobStatus.Pending} WHERE status = ${JobStatus.Processing} AND created_at < @threshold
+    UPDATE plainjob_jobs SET status = ${JobStatus.Pending} WHERE status = ${JobStatus.Processing} AND created_at < @threshold
   `);
 
   const getAndMarkJobAsProcessingStmt = db.prepare(`
-    UPDATE plainjobs_jobs SET status = ${JobStatus.Processing}
+  UPDATE plainjob_jobs SET status = ${JobStatus.Processing}
+  WHERE id = (
+    SELECT id FROM plainjob_jobs
     WHERE status = ${JobStatus.Pending} AND type = @type
-    RETURNING *
-    ORDER BY created_at LIMIT 1`);
+    ORDER BY created_at LIMIT 1
+  )
+`);
+
+  const getUpdatedJobStmt = db.prepare(`
+  SELECT * FROM plainjob_jobs
+  WHERE status = ${JobStatus.Processing} AND type = @type
+  ORDER BY created_at LIMIT 1
+`);
 
   const getNextScheduledJobStmt = db.prepare(`
     SELECT 
@@ -225,21 +291,21 @@ export function defineQueue(opts: QueueOptions): Queue {
       created_at as createdAt,
       cron_expression as cronExpression,
       next_run as nextRun
-    FROM plainjobs_scheduled_jobs 
+    FROM plainjob_scheduled_jobs 
     WHERE status = ${ScheduledJobStatus.Idle} AND next_run <= @now
     ORDER BY next_run LIMIT 1
   `);
 
   const updateJobStatusStmt = db.prepare(`
-    UPDATE plainjobs_jobs SET status = @status WHERE id = @id
+    UPDATE plainjob_jobs SET status = @status WHERE id = @id
   `);
 
   const updateScheduledJobStatusStmt = db.prepare(`
-    UPDATE plainjobs_scheduled_jobs SET status = @status, next_run = @nextRun WHERE id = @id
+    UPDATE plainjob_scheduled_jobs SET status = @status, next_run = @nextRun WHERE id = @id
   `);
 
   const failJobStmt = db.prepare(`
-    UPDATE plainjobs_jobs SET status = ${JobStatus.Failed}, failed_at = @failedAt, error = @error WHERE id = @id
+    UPDATE plainjob_jobs SET status = ${JobStatus.Failed}, failed_at = @failedAt, error = @error WHERE id = @id
   `);
 
   const queue: Queue = {
@@ -274,7 +340,7 @@ export function defineQueue(opts: QueueOptions): Queue {
     },
     schedule(type: string, { cron }: { cron: string }): { id: number } {
       try {
-        parseCron(cron);
+        cronParser.parseExpression(cron);
       } catch (error) {
         throw new Error(
           `invalid cron expression provided: ${cron} ${
@@ -282,9 +348,9 @@ export function defineQueue(opts: QueueOptions): Queue {
           }`
         );
       }
-      const found = getScheduledJobByTypeStmt.get({
+      const found = (getScheduledJobByTypeStmt.get({
         type,
-      }) as PersistedScheduledJob | undefined;
+      }) ?? undefined) as PersistedScheduledJob | undefined;
       if (found) {
         log.debug(
           `updating existing scheduled job ${found.id} with cron expression ${cron}`
@@ -305,30 +371,34 @@ export function defineQueue(opts: QueueOptions): Queue {
     },
     countJobs(opts?: { type?: string; status?: JobStatus }) {
       if (opts?.type && opts?.status !== undefined) {
-        const result = countJobsByTypeAndStatusStmt.get({
+        const result = (countJobsByTypeAndStatusStmt.get({
           type: opts.type,
           status: opts.status,
-        }) as { "COUNT(*)": number };
+        }) ?? undefined) as { "COUNT(*)": number };
         return result["COUNT(*)"];
       }
       if (opts?.status !== undefined && !opts?.type) {
-        const result = countJobsByStatusStmt.get({ status: opts.status }) as {
+        const result = (countJobsByStatusStmt.get({ status: opts.status }) ??
+          undefined) as {
           "COUNT(*)": number;
         };
         return result["COUNT(*)"];
       }
       if (opts?.type && opts?.status === undefined) {
-        const result = countJobsByTypeStmt.get({ type: opts.type }) as {
+        const result = (countJobsByTypeStmt.get({ type: opts.type }) ??
+          undefined) as {
           "COUNT(*)": number;
         };
         return result["COUNT(*)"];
       }
 
-      const result = countJobsStmt.get() as { "COUNT(*)": number };
+      const result = (countJobsStmt.get() ?? undefined) as {
+        "COUNT(*)": number;
+      };
       return result["COUNT(*)"];
     },
     getJobById(id: number): PersistedJob | undefined {
-      return getJobByIdStmt.get(id) as PersistedJob | undefined;
+      return (getJobByIdStmt.get(id) ?? undefined) as PersistedJob | undefined;
     },
     getJobTypes() {
       const result = getJobTypesStmt.all() as { type: string }[];
@@ -368,16 +438,19 @@ export function defineQueue(opts: QueueOptions): Queue {
       }
     },
     getAndMarkJobAsProcessing(type: string): PersistedJob | undefined {
-      return getAndMarkJobAsProcessingStmt.get({
-        type,
-      }) as PersistedJob | undefined;
+      return db.transaction(() => {
+        getAndMarkJobAsProcessingStmt.run({ type });
+        return (getUpdatedJobStmt.get({ type }) ?? undefined) as
+          | PersistedJob
+          | undefined;
+      })();
     },
     getAndMarkScheduledJobAsProcessing(): PersistedScheduledJob | undefined {
       return db
         .transaction((): PersistedScheduledJob | undefined => {
-          const job = getNextScheduledJobStmt.get({
+          const job = (getNextScheduledJobStmt.get({
             now: Date.now(),
-          }) as PersistedScheduledJob | undefined;
+          }) ?? undefined) as PersistedScheduledJob | undefined;
 
           if (job) {
             updateScheduledJobStatusStmt.run({
