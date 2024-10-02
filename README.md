@@ -4,23 +4,7 @@ A SQLite-backed job queue for `better-sqlite3` and `bun:sqlite` processing 15k j
 
 ## Getting Started
 
-Node:
-
-```bash
-npm install plainjob better-sqlite3
-```
-
-Create a queue:
-
-```typescript
-import { better, defineQueue } from "plainjob";
-import Database from "better-sqlite3";
-
-const connection = better(new Database("data.db"));
-const queue = defineQueue({ connection });
-```
-
-Bun:
+### Using bun
 
 ```bash
 bun add plainjob
@@ -36,7 +20,23 @@ const connection = bun(new Database("data.db", { strict: true }));
 const queue = defineQueue({ connection });
 ```
 
-Here's a minimal example:
+### Using node
+
+```bash
+npm install plainjob better-sqlite3
+```
+
+Create a queue:
+
+```typescript
+import { better, defineQueue } from "plainjob";
+import Database from "better-sqlite3";
+
+const connection = better(new Database("data.db"));
+const queue = defineQueue({ connection });
+```
+
+### Minimal Example
 
 ```typescript
 import { bun, defineQueue, defineWorker } from "plainjob";
