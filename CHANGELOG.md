@@ -1,5 +1,28 @@
 # plainjob
 
+## v0.0.5
+
+[compare changes](https://github.com/justplainstuff/plainjobs/compare/v0.0.4...v0.0.5)
+
+### 🚀 Enhancements
+
+- Support bun:sqlite ([3e8c2eb](https://github.com/justplainstuff/plainjobs/commit/3e8c2eb))
+
+### 🩹 Fixes
+
+- List of files ([241e2eb](https://github.com/justplainstuff/plainjobs/commit/241e2eb))
+- Bun lockfile ([ad4c89c](https://github.com/justplainstuff/plainjobs/commit/ad4c89c))
+- __dirname in bench ([af98113](https://github.com/justplainstuff/plainjobs/commit/af98113))
+
+### 🏡 Chore
+
+- Publish command ([25aada2](https://github.com/justplainstuff/plainjobs/commit/25aada2))
+- Tsup ([9af9219](https://github.com/justplainstuff/plainjobs/commit/9af9219))
+
+### ❤️ Contributors
+
+- Josef Erben <josef@erben.systems>
+
 ## v0.0.4
 
 [compare changes](https://github.com/justplainstuff/plainjob/compare/v0.0.3...v0.0.4)
