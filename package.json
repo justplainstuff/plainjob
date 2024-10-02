@@ -1,6 +1,6 @@
 {
   "name": "plainjob",
-  "version": "0.0.5",
+  "version": "0.0.12",
   "description": "A queue based on SQLite capable of processing 15k jobs/s.",
   "type": "module",
   "main": "dist/plainjob.js",
@@ -18,7 +18,7 @@
     "bench:better": "tsx bench/better.ts",
     "bench:bun": "bun run bench/bun.ts",
     "check": "bun run test:better && bun run test:bun && bun run bench:better && bun run bench:bun",
-    "publish": "changelogen --release --publish"
+    "publish": "changelogen --publish --release"
   },
   "keywords": [
     "plainjob",
