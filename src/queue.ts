@@ -67,7 +67,7 @@ export function bun(database: BunSqliteDatabase): Connection {
   };
 }
 
-type QueueOptions = {
+export type QueueOptions = {
   /** A SQLite database connection, supports better-sqlite3 and bun:sqlite. */
   connection: Connection;
   /** An optional logger, defaults to console. Winston compatible. */

@@ -2,7 +2,7 @@ import { defineConfig } from "tsup";
 
 export default defineConfig({
   target: "node20",
-  format: ["cjs"],
+  format: ["esm"],
   entry: ["src/plainjob.ts"],
   external: [],
   dts: true,
