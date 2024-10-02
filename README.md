@@ -63,7 +63,7 @@ worker.start();
 
 ## Features
 
-- **SQLite-backed**: Reliable persistence using better-sqlite3
+- **SQLite-backed**: Reliable persistence using bun:sqlite or better-sqlite3
 - **High performance**: Process up to 15,000 jobs per second
 - **Cron-scheduled jobs**: Easily schedule recurring tasks
 - **Automatic job cleanup**: Remove old completed and failed jobs
