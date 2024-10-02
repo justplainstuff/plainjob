@@ -20,6 +20,8 @@ const connection = bun(new Database("data.db", { strict: true }));
 const queue = defineQueue({ connection });
 ```
 
+Make sure strict mode is enabled!
+
 ### Using node
 
 ```bash
