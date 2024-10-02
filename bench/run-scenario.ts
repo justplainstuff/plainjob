@@ -91,8 +91,9 @@ export async function runScenario(
 function spawnWorkerProcess(connection: Connection): Promise<void> {
   return new Promise((resolve, reject) => {
     const workerPath = path.join(
-      import.meta.dirname,
-      connection.driver === "bun:sqlite" ? "worker-bun" : "worker-better"
+      process.cwd(),
+      "bench",
+      connection.driver === "bun:sqlite" ? "worker-bun.ts" : "worker-better.ts"
     );
     const child: ChildProcess = fork(workerPath, [
       connection.filename,
