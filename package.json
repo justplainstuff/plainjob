@@ -1,6 +1,6 @@
 {
   "name": "plainjob",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "description": "A queue based on SQLite capable of processing 15k jobs/s.",
   "type": "module",
   "main": "dist/plainjob.js",
