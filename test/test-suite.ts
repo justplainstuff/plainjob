@@ -424,7 +424,7 @@ export function getTestSuite(
     });
   });
 
-  describe("worker", async () => {
+  describe("process (queue and worker", async () => {
     let connection: Connection;
 
     beforeEach(() => {

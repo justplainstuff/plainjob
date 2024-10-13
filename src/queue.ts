@@ -278,21 +278,6 @@ export function defineQueue(opts: QueueOptions): Queue {
     UPDATE plainjob_jobs SET status = ${JobStatus.Pending} WHERE status = ${JobStatus.Processing} AND next_run_at < @threshold
   `);
 
-  const getAndMarkJobAsProcessingStmt = db.prepare(`
-  UPDATE plainjob_jobs SET status = ${JobStatus.Processing}
-  WHERE id = (
-    SELECT id FROM plainjob_jobs
-    WHERE status = ${JobStatus.Pending} AND type = @type AND next_run_at <= @now
-    ORDER BY next_run_at LIMIT 1
-  )
-`);
-
-  const getUpdatedJobStmt = db.prepare(`
-  SELECT * FROM plainjob_jobs
-  WHERE status = ${JobStatus.Processing} AND type = @type AND next_run_at <= @now
-  ORDER BY next_run_at LIMIT 1
-`);
-
   const getJobIdToProcessNextStmt = db.prepare(`
   SELECT id
   FROM plainjob_jobs 
