@@ -30,7 +30,9 @@ export function getTestSuite(
     it("should add a job to the queue", async () => {
       const queue = defineQueue({ connection });
       queue.add("paint", { color: "red" });
-      const job = queue.getAndMarkJobAsProcessing("paint");
+      const jobId = queue.getAndMarkJobAsProcessing("paint");
+      if (!jobId) throw new Error("Job not found");
+      const job = queue.getJobById(jobId.id);
       if (!job) throw new Error("Job not found");
       expect(JSON.parse(job.data)).toEqual({ color: "red" });
       queue.close();
@@ -73,7 +75,9 @@ export function getTestSuite(
 
       queue.add("customSerialize", { b: 2, a: 1, c: 3 });
 
-      const job = queue.getAndMarkJobAsProcessing("customSerialize");
+      const jobId = queue.getAndMarkJobAsProcessing("customSerialize");
+      if (!jobId) throw new Error("Job not found");
+      const job = queue.getJobById(jobId.id);
       if (!job) throw new Error("Job not found");
 
       expect(job.data).toBe('[["a",1],["b",2],["c",3]]');
@@ -87,7 +91,9 @@ export function getTestSuite(
     it("should mark jobs as done or failed", async () => {
       const queue = defineQueue({ connection });
       queue.add("test", { step: 1 });
-      const job = queue.getAndMarkJobAsProcessing("test");
+      const jobId = queue.getAndMarkJobAsProcessing("test");
+      if (!jobId) throw new Error("Job not found");
+      const job = queue.getJobById(jobId.id);
       if (!job) throw new Error("job not found");
       expect(job.status).toBe(JobStatus.Processing);
 
@@ -134,12 +140,12 @@ export function getTestSuite(
       const job = queue.getAndMarkScheduledJobAsProcessing();
       expect(job).toBeDefined();
 
-      const nextRun = Date.now() + 60000; // 1 minute from now
-      queue.markScheduledJobAsIdle(id, nextRun);
+      const nextRunAt = Date.now() + 60000; // 1 minute from now
+      queue.markScheduledJobAsIdle(id, nextRunAt);
 
       const updatedJob = queue.getScheduledJobById(id);
       expect(updatedJob?.status).toBe(ScheduledJobStatus.Idle);
-      expect(updatedJob?.nextRun).toBe(nextRun);
+      expect(updatedJob?.nextRunAt).toBe(nextRunAt);
 
       queue.close();
     });
@@ -153,7 +159,9 @@ export function getTestSuite(
 
       const { id } = queue.add("test", { value: "timeout test" });
 
-      const job = queue.getAndMarkJobAsProcessing("test");
+      const jobId = queue.getAndMarkJobAsProcessing("test");
+      if (!jobId) throw new Error("Job not found");
+      const job = queue.getJobById(jobId.id);
       expect(job).toBeDefined();
       expect(job?.id).toBe(id);
       expect(job?.status).toBe(JobStatus.Processing);
@@ -491,7 +499,9 @@ export function getTestSuite(
       const { id } = queue.add("test", { value: "timeout test" });
 
       // simulate worker dying
-      const job = queue.getAndMarkJobAsProcessing("test");
+      const jobId = queue.getAndMarkJobAsProcessing("test");
+      if (!jobId) throw new Error("Job not found");
+      const job = queue.getJobById(jobId.id);
       expect(job).toBeDefined();
       expect(job?.id).toBe(id);
       expect(job?.status).toBe(JobStatus.Processing);
@@ -619,6 +629,47 @@ export function getTestSuite(
 
       expect(JSON.parse(failedJob.data)).toEqual({ value: "failed test" });
       expect(failedError).toContain("Test error");
+    });
+
+    it("should delay job execution", async () => {
+      const queue = defineQueue({ connection });
+      const results: unknown[] = [];
+      const worker = defineWorker(
+        "delayed",
+        async (job: Job) => {
+          results.push(JSON.parse(job.data));
+        },
+        { queue }
+      );
+
+      const delay = 20;
+      const startTime = Date.now();
+
+      queue.add("delayed", { value: "instant job" });
+      queue.add("delayed", { value: "delayed job" }, { delay });
+
+      // we have to await here for vitest
+      await expect(processAll(queue, worker, { timeout: 10 })).rejects.toThrow(
+        "timeout while waiting for all jobs the be processed"
+      );
+
+      expect(results.length).toBe(1);
+      expect(results[0]).toEqual({ value: "instant job" });
+
+      await new Promise((resolve) => setTimeout(resolve, delay + 40));
+
+      await processAll(queue, worker);
+
+      const endTime = Date.now();
+
+      expect(results).toEqual([
+        { value: "instant job" },
+        {
+          value: "delayed job",
+        },
+      ]);
+
+      expect(endTime - startTime).toBeGreaterThanOrEqual(delay);
     });
   });
 }

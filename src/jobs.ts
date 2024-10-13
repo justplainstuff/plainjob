@@ -11,7 +11,7 @@ export type PersistedJob = {
   data: string;
   status: JobStatus;
   createdAt: number;
-  nextRun?: number;
+  nextRunAt?: number;
   failedAt?: number;
   error?: string;
 };
@@ -27,7 +27,7 @@ export type PersistedScheduledJob = {
   status: ScheduledJobStatus;
   createdAt: number;
   cronExpression: string;
-  nextRun: number;
+  nextRunAt: number;
 };
 
 export type Job = {

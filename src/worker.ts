@@ -1,5 +1,5 @@
 import cronParser from "cron-parser";
-import { JobStatus, type Job, type Logger } from "./jobs";
+import { JobStatus, type Job, type Logger, type PersistedJob } from "./jobs";
 import type { Queue } from "./queue";
 
 /** Function that processes a job and optionally returns a promise. */
@@ -49,12 +49,12 @@ export function defineWorker(
       log.debug(
         `worker [${id}] processing scheduled job '${scheduledJob.id}' '${scheduledJob.type}'`
       );
-      const nextRun = cronParser
+      const nextRunAt = cronParser
         .parseExpression(scheduledJob.cronExpression)
         .next()
         .toDate()
         .getTime();
-      queue.markScheduledJobAsIdle(scheduledJob.id, nextRun);
+      queue.markScheduledJobAsIdle(scheduledJob.id, nextRunAt);
       log.debug(
         `worker [${id}] marking scheduled job ${scheduledJob.id} as 'idle'`
       );
@@ -70,10 +70,12 @@ export function defineWorker(
 
   async function processRegularJobs() {
     log.debug(`worker [${id}] checking for regular jobs`);
-    const job = queue.getAndMarkJobAsProcessing(jobType);
-    if (job) {
+    const jobId = queue.getAndMarkJobAsProcessing(jobType);
+    if (jobId) {
+      const job = queue.getJobById(jobId.id) as PersistedJob;
       if (options.onProcessing) {
-        options.onProcessing(job);
+        const job = queue.getJobById(jobId.id);
+        options.onProcessing(job!);
       }
       log.debug(
         `worker [${id}] processing job ${job.id}, ${job.type}, ${job.data}`

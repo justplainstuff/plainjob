@@ -68,8 +68,9 @@ worker.start();
 - **SQLite-backed**: Reliable persistence using bun:sqlite or better-sqlite3
 - **High performance**: Process up to 15,000 jobs per second
 - **Cron-scheduled jobs**: Easily schedule recurring tasks
+- **Delayed jobs**: Run jobs after a specified delay
 - **Automatic job cleanup**: Remove old completed and failed jobs
-- **Job timeout handling**: Requeue jobs if a worker dies
+- **Job timeout handling**: Re-queue jobs if a worker dies
 - **Custom logging**: Integrate with your preferred logging solution
 - **Lightweight**: No external dependencies beyond better-sqlite3 and a cron-parser
 
@@ -95,6 +96,13 @@ const queue = defineQueue({
 ```typescript
 // Enqueue a one-time job
 queue.add("send-email", { to: "user@example.com", subject: "Hello" });
+
+// Run a job a after 1 second
+queue.add(
+  "send-email",
+  { to: "user@example.com", subject: "Hello" },
+  { delay: 1000 }
+);
 
 // Schedule a recurring job
 queue.schedule("daily-report", { cron: "0 0 * * *" });
