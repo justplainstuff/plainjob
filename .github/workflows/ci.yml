@@ -38,7 +38,7 @@ jobs:
       - name: setup node 🟢
         uses: actions/setup-node@v4
         with:
-          node-version: "20.20.0"
+          node-version: "24.13.0"
       - name: install dependencies 🔧
         run: npm install
       - name: build ✅
