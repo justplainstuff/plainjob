@@ -32,7 +32,7 @@
   "author": "Josef Erben <josef@plainweb.dev>",
   "license": "MIT",
   "dependencies": {
-    "cron-parser": "^4.9.0"
+    "cron-parser": "^5.0.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.10",
