@@ -39,7 +39,7 @@
     "@types/bun": "latest",
     "better-sqlite3": "^11.0.0",
     "changelogen": "^0.5.5",
-    "tsup": "^8.2.4",
+    "tsup": "^9.0.0",
     "tsx": "^4.19.1",
     "typescript": "^5.5.4",
     "vitest": "^3.0.0"
